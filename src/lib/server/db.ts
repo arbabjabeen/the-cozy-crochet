@@ -76,6 +76,13 @@ export async function ensureDbInitialized(): Promise<boolean> {
     }
 
     try {
+      // Fast probe: check if tables already exist and have products to avoid repeating DDL on every cold start
+      const probeRes = await pool.query("SELECT 1 FROM products LIMIT 1").catch(() => null);
+      if (probeRes) {
+        dbInitialized = true;
+        return true;
+      }
+
       // Test connection
       const testRes = await pool.query("SELECT NOW()");
       console.log("✅ PostgreSQL Connected successfully:", testRes.rows[0].now);

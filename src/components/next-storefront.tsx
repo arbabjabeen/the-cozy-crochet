@@ -63,7 +63,7 @@ export function StoreShell({ children }: { children: ReactNode }) {
 
 
       {/* Top Announcement Bar */}
-      <div className="bg-primary px-4 py-2 text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-primary-foreground flex items-center justify-center gap-2 flex-wrap">
+      <div className="bg-primary px-3 sm:px-4 py-1.5 sm:py-2 text-center text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider sm:tracking-[0.18em] text-primary-foreground flex items-center justify-center gap-1.5 sm:gap-2 flex-wrap">
         <span>Complimentary gift wrapping on every handmade order</span>
         <span className="opacity-60 hidden sm:inline">·</span>
         <Link href="/custom-order" className="underline underline-offset-2 hover:opacity-80">
@@ -72,10 +72,10 @@ export function StoreShell({ children }: { children: ReactNode }) {
       </div>
 
       <header className="sticky top-0 z-40 border-b border-border/70 bg-background/95 backdrop-blur">
-        <div className="mx-auto flex h-18 max-w-7xl items-center justify-between px-5 lg:px-8">
-          <span className="font-display text-2xl font-medium tracking-tight cursor-default select-none">
+        <div className="mx-auto flex h-16 sm:h-18 max-w-7xl items-center justify-between px-4 sm:px-5 lg:px-8">
+          <Link href="/" className="font-display text-xl sm:text-2xl font-medium tracking-tight hover:text-primary transition-colors select-none">
             The Cozy Crochet
-          </span>
+          </Link>
 
           <nav className="hidden items-center gap-7 md:flex" aria-label="Main navigation">
             {nav.map(([label, href]) => {
@@ -131,9 +131,9 @@ export function StoreShell({ children }: { children: ReactNode }) {
               </Button>
             )}
 
-            <Button variant="soft" className="ml-1 relative" asChild>
+            <Button variant="soft" className="ml-1 relative h-9 px-3" asChild>
               <Link href="/cart">
-                <ShoppingBag className="size-4" /> Bag
+                <ShoppingBag className="size-4" /> <span className="hidden sm:inline">Bag</span>
                 <span className="grid size-5 place-items-center rounded-full bg-accent text-[11px] text-accent-foreground font-bold">
                   {totalCount}
                 </span>
@@ -390,10 +390,10 @@ function Footer() {
 
 export function PageIntro({ eyebrow, title, text }: { eyebrow: string; title: string; text: string }) {
   return (
-    <section className="mx-auto max-w-7xl px-5 pb-10 pt-14 lg:px-8">
+    <section className="mx-auto max-w-7xl px-4 sm:px-5 pb-6 sm:pb-10 pt-8 sm:pt-14 lg:px-8">
       <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent">{eyebrow}</p>
-      <h1 className="mt-3 max-w-3xl font-display text-4xl font-medium leading-tight sm:text-5xl">{title}</h1>
-      <p className="mt-4 max-w-2xl text-lg leading-7 text-muted-foreground">{text}</p>
+      <h1 className="mt-2.5 max-w-3xl font-display text-3xl font-medium leading-tight sm:text-4xl lg:text-5xl">{title}</h1>
+      <p className="mt-3 max-w-2xl text-base sm:text-lg leading-relaxed text-muted-foreground">{text}</p>
     </section>
   );
 }
@@ -462,25 +462,31 @@ export function ProductCard({
             </div>
             <Link
               href={`/product/${product.slug}`}
-              className="mt-1 block font-display text-lg font-medium hover:text-primary transition-colors"
+              className="mt-1 block font-display text-base sm:text-lg font-medium hover:text-primary transition-colors line-clamp-2 min-h-[2.5rem] leading-snug"
             >
               {product.name}
             </Link>
           </div>
-          <p className="font-semibold text-primary">{money(product.price)}</p>
+          <p className="font-semibold text-primary shrink-0 text-sm sm:text-base">{money(product.price)}</p>
         </div>
       </div>
-      <div className="mt-3 flex items-center gap-2">
+      <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 sm:gap-2">
         <Button
           variant="outline"
           size="sm"
-          className="flex-1 text-xs font-semibold py-2 bg-card text-foreground hover:bg-secondary hover:text-foreground"
+          className="w-full sm:flex-1 text-[11px] sm:text-xs font-semibold h-8 sm:h-9 px-2 bg-card text-foreground hover:bg-secondary hover:text-foreground"
           onClick={handleAdd}
         >
-          <ShoppingBag className="mr-1 size-3.5" /> Add to Cart
+          <ShoppingBag className="mr-1 size-3 sm:size-3.5 shrink-0" />
+          <span className="truncate">Add to Cart</span>
         </Button>
-        <Button size="sm" className="flex-1 text-xs font-bold py-2 bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs" onClick={handleBuyNow}>
-          <Zap className="mr-1 size-3.5" /> Buy Now
+        <Button
+          size="sm"
+          className="w-full sm:flex-1 text-[11px] sm:text-xs font-bold h-8 sm:h-9 px-2 bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs"
+          onClick={handleBuyNow}
+        >
+          <Zap className="mr-1 size-3 sm:size-3.5 shrink-0" />
+          <span className="truncate">Buy Now</span>
         </Button>
       </div>
     </article>
@@ -523,7 +529,7 @@ export function ProductGrid({
   }
 
   return (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-9 md:grid-cols-3 lg:grid-cols-4 lg:gap-x-6">
+    <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:gap-x-4 sm:gap-y-9 md:grid-cols-3 lg:grid-cols-4 lg:gap-x-6">
       {items.map((product, idx) => (
         <ProductCard
           key={(product as any)._id || `${product.slug}-${idx}`}

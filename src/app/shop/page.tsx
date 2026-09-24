@@ -110,10 +110,10 @@ function ShopContent() {
 
   return (
     <StoreShell>
-      <section className="mx-auto max-w-7xl px-5 lg:px-8 pt-4 sm:pt-6 pb-16">
+      <section className="mx-auto max-w-7xl px-4 sm:px-5 lg:px-8 pt-4 sm:pt-6 pb-16">
         {/* Search & Category Filters Bar */}
-        <div className="mb-8 border-y border-border py-4 space-y-3">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="mb-6 sm:mb-8 border-y border-border py-3.5 sm:py-4 space-y-3">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4">
             <div className="relative w-full sm:max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input
@@ -133,7 +133,7 @@ function ShopContent() {
                 </button>
               )}
             </div>
-            <span className="text-xs font-medium text-muted-foreground self-end sm:self-center">
+            <span className="text-xs font-medium text-muted-foreground text-right sm:text-left self-end sm:self-center">
               {loading ? (
                 <span className="animate-pulse">Loading...</span>
               ) : (
@@ -145,8 +145,8 @@ function ShopContent() {
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <SlidersHorizontal className="mr-1 size-3.5 text-muted-foreground" />
+          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible no-scrollbar pt-1">
+            <SlidersHorizontal className="mr-1 size-3.5 text-muted-foreground shrink-0" />
             {cats.map((c) => {
               const isSelected = cat.toLowerCase().trim() === c.toLowerCase().trim();
               const count =
@@ -162,7 +162,7 @@ function ShopContent() {
                   variant={isSelected ? "default" : "outline"}
                   size="sm"
                   onClick={() => handleCategoryChange(c)}
-                  className={`rounded-full transition-all ${
+                  className={`rounded-full shrink-0 text-xs sm:text-sm transition-all h-8 sm:h-9 px-3 ${
                     isSelected
                       ? "shadow-xs font-bold"
                       : "bg-card text-foreground hover:bg-secondary hover:text-foreground"
@@ -170,7 +170,7 @@ function ShopContent() {
                 >
                   {c}
                   <span
-                    className={`ml-1.5 text-xs rounded-full px-1.5 py-0.2 ${
+                    className={`ml-1.5 text-[11px] rounded-full px-1.5 py-0.2 ${
                       isSelected
                         ? "bg-primary-foreground/20 text-primary-foreground"
                         : "bg-secondary text-foreground/80"

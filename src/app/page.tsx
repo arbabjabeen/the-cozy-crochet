@@ -63,31 +63,29 @@ export default function HomePage() {
   return (
     <StoreShell>
       {/* Hero Section */}
-      <section className="mx-auto grid max-w-7xl items-start gap-8 px-5 pb-10 pt-4 md:grid-cols-[1.1fr_1fr] md:gap-12 md:pt-6 lg:px-8 lg:pt-8">
+      <section className="mx-auto grid max-w-7xl items-start gap-6 sm:gap-8 px-4 sm:px-5 pb-8 sm:pb-10 pt-3 sm:pt-4 md:grid-cols-[1.1fr_1fr] md:gap-12 md:pt-6 lg:px-8 lg:pt-8">
         <div className="rise pt-1 md:pt-2">
-          <p className="inline-flex items-center gap-1.5 rounded-full bg-card px-3.5 py-1 text-xs font-bold uppercase tracking-[0.16em] text-primary ring-1 ring-border shadow-2xs">
+          <p className="inline-flex items-center gap-1.5 rounded-full bg-card px-3 sm:px-3.5 py-1 text-[11px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-[0.16em] text-primary ring-1 ring-border shadow-2xs">
             <Sparkles className="size-3 text-primary" /> Handmade in small batches by AJ
           </p>
-          <h1 className="mt-4 sm:mt-5 max-w-xl font-display text-4xl sm:text-5xl lg:text-6xl font-medium leading-[1.08] tracking-tight">
+          <h1 className="mt-3 sm:mt-5 max-w-xl font-display text-3xl sm:text-5xl lg:text-6xl font-medium leading-[1.1] sm:leading-[1.08] tracking-tight">
             Woven by hand, made to last.
           </h1>
-          <p className="mt-4 max-w-lg text-base sm:text-lg leading-relaxed text-muted-foreground">
+          <p className="mt-3 sm:mt-4 max-w-lg text-sm sm:text-lg leading-relaxed text-muted-foreground">
             Slow-made crochet pieces crafted with soft natural fibres and wrapped with care by AJ.
           </p>
-          <div className="mt-6 sm:mt-7 flex flex-wrap gap-3">
-            <Button size="lg" asChild className="shadow-xs font-bold">
+          <div className="mt-5 sm:mt-7 flex flex-wrap gap-2.5 sm:gap-3">
+            <Button size="lg" asChild className="shadow-xs font-bold text-xs sm:text-sm h-10 sm:h-11 px-4 sm:px-6">
               <Link href="/shop">
                 Shop pieces <ArrowRight className="ml-1.5 size-4" />
               </Link>
             </Button>
-            <Button size="lg" variant="outline" asChild className="font-semibold bg-card text-foreground hover:bg-secondary hover:text-foreground">
+            <Button size="lg" variant="outline" asChild className="font-semibold text-xs sm:text-sm h-10 sm:h-11 px-4 sm:px-6 bg-card text-foreground hover:bg-secondary hover:text-foreground">
               <Link href="/custom-order">
                 <Sparkles className="mr-1.5 size-4 text-primary" /> Customize
               </Link>
             </Button>
           </div>
-
-
         </div>
 
         <div className="relative rise">
@@ -96,16 +94,16 @@ export default function HomePage() {
             alt="Artisan crocheting a piece"
             width={1024}
             height={1280}
-            className="w-full h-auto max-h-[480px] lg:max-h-[520px] rounded-3xl object-cover shadow-sm ring-1 ring-border"
+            className="w-full h-auto max-h-[380px] sm:max-h-[480px] lg:max-h-[520px] rounded-2xl sm:rounded-3xl object-cover shadow-sm ring-1 ring-border"
           />
         </div>
       </section>
 
       {/* Category Grid */}
       {categories.length > 0 && (
-        <section className="mx-auto max-w-7xl px-5 py-14 lg:px-8">
+        <section className="mx-auto max-w-7xl px-4 sm:px-5 py-10 sm:py-14 lg:px-8">
           <SectionHeading title="Shop by category" link="Browse all" to="/collections" />
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4">
             {categories.map((cat) => (
               <Link
                 key={cat.name}

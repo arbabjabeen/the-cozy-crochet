@@ -61,7 +61,7 @@ export default function CartPage() {
         title="A few lovely things."
         text="Your handmade pieces are held here while you decide. Every order is wrapped with studio care."
       />
-      <section className="mx-auto grid max-w-6xl gap-10 px-5 pb-24 md:grid-cols-[1.5fr_0.8fr]">
+      <section className="mx-auto grid max-w-6xl gap-8 sm:gap-10 px-4 sm:px-5 pb-24 md:grid-cols-[1.5fr_0.8fr]">
         <div className="divide-y divide-border">
           {items.map(({ product: p, quantity: q, color }) => {
             const imgSrc =
@@ -70,28 +70,28 @@ export default function CartPage() {
                 : (p.image as any)?.src || "/assets/cloud-throw.jpg";
 
             return (
-              <div key={p.slug} className="flex gap-4 py-6">
-                <Link href={`/product/${p.slug}`}>
+              <div key={p.slug} className="flex gap-3 sm:gap-4 py-4 sm:py-6">
+                <Link href={`/product/${p.slug}`} className="shrink-0">
                   <img
                     src={imgSrc}
                     alt={p.name}
-                    className="size-28 rounded-2xl object-cover ring-1 ring-border"
+                    className="size-20 sm:size-28 rounded-xl sm:rounded-2xl object-cover ring-1 ring-border"
                   />
                 </Link>
-                <div className="flex flex-1 flex-col justify-between">
-                  <div className="flex justify-between gap-3">
-                    <div>
+                <div className="flex flex-1 flex-col justify-between min-w-0">
+                  <div className="flex justify-between gap-2 sm:gap-3">
+                    <div className="min-w-0">
                       <Link
                         href={`/product/${p.slug}`}
-                        className="font-display text-xl font-medium hover:text-primary transition-colors"
+                        className="font-display text-base sm:text-xl font-medium hover:text-primary transition-colors line-clamp-2"
                       >
                         {p.name}
                       </Link>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
                         {color || "Sage"} · Hand wrapped
                       </p>
                     </div>
-                    <strong className="font-medium text-lg text-primary">{money(p.price * q)}</strong>
+                    <strong className="font-semibold sm:font-medium text-base sm:text-lg text-primary shrink-0">{money(p.price * q)}</strong>
                   </div>
                   <div className="mt-4 flex items-center gap-2">
                     <div className="flex items-center rounded-lg border border-border">

@@ -1,15 +1,89 @@
-import { type Product } from "./catalog";
+import { type Product, products as fallbackProducts } from "./catalog";
 
 const API_BASE = "/api";
 
+// In-memory cache for ultra-fast instant navigation
+let inMemoryProductsCache: Product[] | null = null;
+let activeFetchPromise: Promise<Product[]> | null = null;
+
+function getCachedProducts(): Product[] | null {
+  if (inMemoryProductsCache && inMemoryProductsCache.length > 0) {
+    return inMemoryProductsCache;
+  }
+  if (typeof window !== "undefined") {
+    try {
+      const stored = sessionStorage.getItem("cozy_cached_products");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          inMemoryProductsCache = parsed;
+          return parsed;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return fallbackProducts;
+}
+
+function saveCachedProducts(products: Product[]) {
+  if (!products || products.length === 0) return;
+  inMemoryProductsCache = products;
+  if (typeof window !== "undefined") {
+    try {
+      sessionStorage.setItem("cozy_cached_products", JSON.stringify(products));
+    } catch {
+      // ignore
+    }
+  }
+}
+
 export async function fetchProducts(category?: string, search?: string): Promise<Product[]> {
+  const hasFilter = Boolean((category && category !== "All") || (search && search.trim()));
+
+  // If no filter (full catalog), return cache instantly (0ms) and revalidate quietly in background!
+  if (!hasFilter) {
+    const cached = getCachedProducts();
+
+    if (!activeFetchPromise) {
+      activeFetchPromise = (async () => {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 4000);
+          const res = await fetch(`${API_BASE}/products`, { signal: controller.signal });
+          clearTimeout(timeoutId);
+          if (res.ok) {
+            const fresh = await res.json();
+            if (Array.isArray(fresh) && fresh.length > 0) {
+              saveCachedProducts(fresh);
+              return fresh;
+            }
+          }
+        } catch {
+          // ignore background error
+        } finally {
+          activeFetchPromise = null;
+        }
+        return inMemoryProductsCache || fallbackProducts;
+      })();
+    }
+
+    if (cached && cached.length > 0) {
+      return cached;
+    }
+
+    return activeFetchPromise;
+  }
+
+  // If filtered by category or search term
   try {
     const params = new URLSearchParams();
     if (category && category !== "All") params.append("category", category);
     if (search) params.append("search", search);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
 
     const res = await fetch(`${API_BASE}/products?${params.toString()}`, {
       signal: controller.signal,
@@ -23,13 +97,27 @@ export async function fetchProducts(category?: string, search?: string): Promise
   } catch {
     // fallback
   }
-  return [];
+
+  // Filter in-memory fallback
+  const base = getCachedProducts() || fallbackProducts;
+  return base.filter((p) => {
+    const matchesCat = !category || category === "All" || p.category.toLowerCase() === category.toLowerCase();
+    const matchesSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
+    return matchesCat && matchesSearch;
+  });
 }
 
 export async function fetchProductBySlug(slug: string): Promise<Product | undefined> {
+  const cachedList = getCachedProducts() || fallbackProducts;
+  const found = cachedList.find((p) => p.slug === slug);
+  if (found) {
+    // Return immediately so the page opens in 0ms!
+    return found;
+  }
+
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
 
     const res = await fetch(`${API_BASE}/products/${slug}`, {
       signal: controller.signal,
@@ -42,7 +130,7 @@ export async function fetchProductBySlug(slug: string): Promise<Product | undefi
   } catch {
     // fallback
   }
-  return undefined;
+  return found;
 }
 
 export async function addProduct(product: Partial<Product>): Promise<Product> {

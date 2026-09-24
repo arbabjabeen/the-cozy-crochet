@@ -6,11 +6,11 @@ import { useState, useEffect } from "react";
 import { PageIntro, StoreShell } from "@/components/next-storefront";
 import { Button } from "@/components/ui/button";
 import { fetchProducts } from "@/lib/api";
-import { type Product } from "@/lib/catalog";
+import { products as initialProducts, type Product } from "@/lib/catalog";
 
 export default function CollectionsPage() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [products, setProducts] = useState<Product[]>(initialProducts);
+  const [loading, setLoading] = useState(initialProducts.length === 0);
 
   useEffect(() => {
     fetchProducts().then((data) => {

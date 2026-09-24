@@ -8,7 +8,11 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search");
 
     const products = await getProducts({ category, search });
-    return NextResponse.json(products);
+    return NextResponse.json(products, {
+      headers: {
+        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=600",
+      },
+    });
   } catch (err: any) {
     return NextResponse.json({ message: "Failed to fetch products", error: err.message }, { status: 500 });
   }

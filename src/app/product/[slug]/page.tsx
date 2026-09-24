@@ -196,44 +196,44 @@ export default function ProductDetailPage() {
   return (
     <StoreShell>
       {/* Product Hero Section */}
-      <section className="mx-auto grid max-w-7xl gap-12 px-5 py-12 md:grid-cols-2 lg:px-8">
+      <section className="mx-auto grid max-w-7xl gap-8 sm:gap-12 px-4 sm:px-5 py-6 sm:py-12 md:grid-cols-2 lg:px-8">
         <div className="relative">
           <img
             src={imageSrc}
             alt={product.name}
             width={912}
             height={912}
-            className="aspect-square w-full rounded-3xl object-cover shadow-sm ring-1 border border-border"
+            className="aspect-square w-full rounded-2xl sm:rounded-3xl object-cover shadow-sm ring-1 border border-border"
           />
           {product.badge && (
-            <span className="absolute left-4 top-4 rounded-full bg-card/90 backdrop-blur-sm px-3.5 py-1 text-xs font-bold uppercase tracking-wider shadow-xs border border-border">
+            <span className="absolute left-3.5 top-3.5 rounded-full bg-card/90 backdrop-blur-sm px-3 py-1 text-[11px] sm:text-xs font-bold uppercase tracking-wider shadow-xs border border-border">
               {product.badge}
             </span>
           )}
         </div>
 
-        <div className="md:py-5 flex flex-col justify-between">
+        <div className="md:py-3 flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-accent">
                 {product.category}
               </p>
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
-                <ShieldCheck className="size-3.5" /> 100% Handcrafted
+              <span className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                <ShieldCheck className="size-3 sm:size-3.5" /> 100% Handcrafted
               </span>
             </div>
 
-            <h1 className="mt-2 font-display text-4xl font-medium sm:text-5xl">{product.name}</h1>
+            <h1 className="mt-2 font-display text-2xl sm:text-4xl lg:text-5xl font-medium">{product.name}</h1>
 
             {/* Price & Rating Badge Bar */}
-            <div className="mt-4 flex flex-wrap items-center gap-4">
-              <p className="font-display text-3xl text-primary font-medium">{money(product.price)}</p>
+            <div className="mt-3 sm:mt-4 flex flex-wrap items-center gap-3 sm:gap-4">
+              <p className="font-display text-2xl sm:text-3xl text-primary font-medium">{money(product.price)}</p>
 
               {/* Clickable star summary */}
               <button
                 type="button"
                 onClick={scrollToReviews}
-                className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 dark:bg-amber-950/40 px-3 py-1 text-xs font-bold text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 dark:bg-amber-950/40 px-2.5 sm:px-3 py-1 text-xs font-bold text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 transition-colors cursor-pointer"
               >
                 <div className="flex items-center gap-0.5 text-amber-500">
                   {[1, 2, 3, 4, 5].map((s) => (
@@ -254,50 +254,52 @@ export default function ProductDetailPage() {
               </button>
             </div>
 
-            <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted-foreground">
+            <p className="mt-4 sm:mt-6 max-w-xl text-base sm:text-lg leading-relaxed text-muted-foreground">
               {product.description} Each piece is hand-looped with high-grade natural yarn, giving it subtle heirloom variations that make it completely unique.
             </p>
 
             {/* Add to Bag and Buy Now Direct Order */}
-            <div className="mt-8 flex flex-wrap gap-3 sm:flex-nowrap">
-              <div className="flex items-center rounded-xl border border-border bg-card">
+            <div className="mt-6 sm:mt-8 space-y-3 sm:space-y-0 sm:flex sm:items-center sm:gap-3">
+              <div className="flex items-center gap-2.5 sm:gap-3">
+                <div className="flex items-center rounded-xl border border-border bg-card">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Decrease quantity"
+                    onClick={() => setQty(Math.max(1, qty - 1))}
+                  >
+                    <Minus className="size-4" />
+                  </Button>
+                  <span className="w-9 sm:w-10 text-center font-bold text-sm sm:text-base">{qty}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Increase quantity"
+                    onClick={() => setQty(qty + 1)}
+                  >
+                    <Plus className="size-4" />
+                  </Button>
+                </div>
+
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Decrease quantity"
-                  onClick={() => setQty(Math.max(1, qty - 1))}
+                  variant="outline"
+                  className="flex-1 sm:flex-initial sm:px-6 py-5 sm:py-6 text-sm sm:text-base font-bold shadow-sm border-2 border-primary/40 bg-card text-foreground hover:bg-secondary hover:text-foreground"
+                  onClick={handleAddToCart}
                 >
-                  <Minus className="size-4" />
-                </Button>
-                <span className="w-10 text-center font-bold">{qty}</span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Increase quantity"
-                  onClick={() => setQty(qty + 1)}
-                >
-                  <Plus className="size-4" />
+                  {added ? (
+                    <>
+                      <Check className="mr-1.5 sm:mr-2 size-4 text-emerald-600" /> Added to Cart!
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingBag className="mr-1.5 sm:mr-2 size-4" /> Add to Cart
+                    </>
+                  )}
                 </Button>
               </div>
 
               <Button
-                variant="outline"
-                className="flex-1 py-6 text-base font-bold shadow-sm border-2 border-primary/40 bg-card text-foreground hover:bg-secondary hover:text-foreground"
-                onClick={handleAddToCart}
-              >
-                {added ? (
-                  <>
-                    <Check className="mr-2 size-4 text-emerald-600" /> Added to Cart!
-                  </>
-                ) : (
-                  <>
-                    <ShoppingBag className="mr-2 size-4" /> Add to Cart
-                  </>
-                )}
-              </Button>
-
-              <Button
-                className="flex-1 py-6 text-base font-bold shadow-md bg-emerald-700 hover:bg-emerald-800 text-white"
+                className="w-full sm:flex-1 py-5 sm:py-6 text-sm sm:text-base font-bold shadow-md bg-emerald-700 hover:bg-emerald-800 text-white"
                 onClick={() => {
                   if (product) {
                     addToCart(product, qty);
