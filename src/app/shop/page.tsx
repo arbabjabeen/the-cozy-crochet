@@ -18,21 +18,17 @@ function ShopContent() {
 
   const [cat, setCat] = useState(initialCategory);
   const [search, setSearch] = useState(initialQuery);
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [allProducts, setAllProducts] = useState<Product[]>(initialProducts);
+  const [loading, setLoading] = useState(initialProducts.length === 0);
 
   useEffect(() => {
     fetchProducts()
       .then((data) => {
         if (data && data.length > 0) {
           setAllProducts(data);
-        } else {
-          setAllProducts(initialProducts);
         }
       })
-      .catch(() => {
-        setAllProducts(initialProducts);
-      })
+      .catch(() => {})
       .finally(() => {
         setLoading(false);
       });

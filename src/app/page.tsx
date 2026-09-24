@@ -9,14 +9,16 @@ import { fetchProducts } from "@/lib/api";
 import { products as initialProducts, type Product } from "@/lib/catalog";
 
 export default function HomePage() {
-  const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [featuredProducts, setFeaturedProducts] = useState<Product[]>(initialProducts);
+  const [loading, setLoading] = useState(initialProducts.length === 0);
 
   useEffect(() => {
     fetchProducts().then((prods) => {
       if (prods && prods.length > 0) {
         setFeaturedProducts(prods);
       }
+      setLoading(false);
+    }).catch(() => {
       setLoading(false);
     });
   }, []);

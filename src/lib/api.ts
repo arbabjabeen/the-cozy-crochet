@@ -8,10 +8,17 @@ export async function fetchProducts(category?: string, search?: string): Promise
     if (category && category !== "All") params.append("category", category);
     if (search) params.append("search", search);
 
-    const res = await fetch(`${API_BASE}/products?${params.toString()}`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const res = await fetch(`${API_BASE}/products?${params.toString()}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data)) return data;
+      if (Array.isArray(data) && data.length > 0) return data;
     }
   } catch {
     // fallback
@@ -21,7 +28,14 @@ export async function fetchProducts(category?: string, search?: string): Promise
 
 export async function fetchProductBySlug(slug: string): Promise<Product | undefined> {
   try {
-    const res = await fetch(`${API_BASE}/products/${slug}`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const res = await fetch(`${API_BASE}/products/${slug}`, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
     if (res.ok) {
       return await res.json();
     }
