@@ -221,7 +221,22 @@ Amount: $${order.total.toFixed(2)}
   }
 }
 
+export const getBaseSiteUrl = (): string => {
+  if (process.env.NEXT_PUBLIC_SITE_URL) {
+    const url = process.env.NEXT_PUBLIC_SITE_URL.trim();
+    return url.startsWith("http") ? url : `https://${url}`;
+  }
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL.trim()}`;
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL.trim()}`;
+  }
+  return "https://the-cozy-crochet.vercel.app";
+};
+
 export async function sendNewsletterWelcomeEmail(subscriberEmail: string) {
+  const siteUrl = getBaseSiteUrl();
   const emailHtml = `
     <!DOCTYPE html>
     <html>
@@ -261,10 +276,10 @@ export async function sendNewsletterWelcomeEmail(subscriberEmail: string) {
 
           <!-- Quick Action Buttons -->
           <div style="text-align: center; margin: 28px 0;">
-            <a href="https://thecozycrochet.com/shop" style="display: inline-block; background-color: #884b2c; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 12px; font-weight: bold; font-size: 14px; margin: 6px;">
+            <a href="${siteUrl}/shop" style="display: inline-block; background-color: #884b2c; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 12px; font-weight: bold; font-size: 14px; margin: 6px;">
               Explore Handcrafted Collection →
             </a>
-            <a href="https://thecozycrochet.com/custom-order" style="display: inline-block; background-color: #f3ece4; color: #884b2c; text-decoration: none; padding: 12px 24px; border-radius: 12px; font-weight: bold; font-size: 14px; margin: 6px; border: 1px solid #ebd9c8;">
+            <a href="${siteUrl}/custom-order" style="display: inline-block; background-color: #f3ece4; color: #884b2c; text-decoration: none; padding: 12px 24px; border-radius: 12px; font-weight: bold; font-size: 14px; margin: 6px; border: 1px solid #ebd9c8;">
               Custom Order Request ✨
             </a>
           </div>
