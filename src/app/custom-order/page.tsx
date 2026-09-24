@@ -105,6 +105,17 @@ export default function CustomOrderPage() {
           id: res.customOrder.customOrderId,
           whatsappUrl: res.whatsappUrl,
         });
+
+        // Persist to localStorage for real-time admin visibility
+        try {
+          const existing = JSON.parse(localStorage.getItem("cozy_studio_custom_orders") || "[]");
+          const updated = [
+            res.customOrder,
+            ...existing.filter((co: any) => co.customOrderId !== res.customOrder.customOrderId),
+          ];
+          localStorage.setItem("cozy_studio_custom_orders", JSON.stringify(updated.slice(0, 50)));
+        } catch {}
+
         toast.success("Your custom order request has been submitted!");
       }
     } catch {

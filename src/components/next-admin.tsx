@@ -232,17 +232,57 @@ export function AdminShell({
   useEffect(() => {
     const fetchCounts = async () => {
       try {
-        const [ordersRes, customRes, msgRes, prodsRes] = await Promise.all([
-          fetch("/api/orders").then((r) => (r.ok ? r.json() : [])).catch(() => []),
-          fetch("/api/custom-orders").then((r) => (r.ok ? r.json() : [])).catch(() => []),
-          fetch("/api/contact").then((r) => (r.ok ? r.json() : [])).catch(() => []),
-          fetch("/api/products").then((r) => (r.ok ? r.json() : [])).catch(() => []),
-        ]);
+        let localOrders: any[] = [];
+        let localCustom: any[] = [];
+        let localMsgs: any[] = [];
 
-        const oList = Array.isArray(ordersRes) ? ordersRes : [];
-        const cList = Array.isArray(customRes) ? customRes : [];
-        const mList = Array.isArray(msgRes) ? msgRes : [];
+        if (typeof window !== "undefined") {
+          try {
+            localOrders = JSON.parse(localStorage.getItem("cozy_studio_orders") || "[]");
+            localCustom = JSON.parse(localStorage.getItem("cozy_studio_custom_orders") || "[]");
+            localMsgs = JSON.parse(localStorage.getItem("cozy_studio_messages") || "[]");
+          } catch {}
+        }
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2500);
+
+        const [ordersRes, customRes, msgRes, prodsRes] = await Promise.all([
+          fetch("/api/orders", { signal: controller.signal }).then((r) => (r.ok ? r.json() : [])).catch(() => []),
+          fetch("/api/custom-orders", { signal: controller.signal }).then((r) => (r.ok ? r.json() : [])).catch(() => []),
+          fetch("/api/contact", { signal: controller.signal }).then((r) => (r.ok ? r.json() : [])).catch(() => []),
+          fetch("/api/products", { signal: controller.signal }).then((r) => (r.ok ? r.json() : [])).catch(() => []),
+        ]);
+        clearTimeout(timeoutId);
+
+        const remoteO = Array.isArray(ordersRes) ? ordersRes : [];
+        const remoteC = Array.isArray(customRes) ? customRes : [];
+        const remoteM = Array.isArray(msgRes) ? msgRes : [];
         const pList = Array.isArray(prodsRes) ? prodsRes : [];
+
+        // Deduplicate orders
+        const oMap = new Map();
+        [...localOrders, ...remoteO].forEach((o) => {
+          const k = o.orderNumber || o.id || o._id;
+          if (k && !oMap.has(k)) oMap.set(k, o);
+        });
+        const oList = Array.from(oMap.values());
+
+        // Deduplicate custom orders
+        const cMap = new Map();
+        [...localCustom, ...remoteC].forEach((c) => {
+          const k = c.customOrderId || c.id || c._id;
+          if (k && !cMap.has(k)) cMap.set(k, c);
+        });
+        const cList = Array.from(cMap.values());
+
+        // Deduplicate messages
+        const mMap = new Map();
+        [...localMsgs, ...remoteM].forEach((m) => {
+          const k = m._id || m.id;
+          if (k && !mMap.has(k)) mMap.set(k, m);
+        });
+        const mList = Array.from(mMap.values());
 
         setOrdersList(oList);
         setCustomList(cList);
@@ -269,7 +309,7 @@ export function AdminShell({
       if (typeof document !== "undefined" && !document.hidden) {
         fetchCounts();
       }
-    }, 20000);
+    }, 25000);
     return () => {
       clearInterval(interval);
       window.removeEventListener("focus", handleFocus);

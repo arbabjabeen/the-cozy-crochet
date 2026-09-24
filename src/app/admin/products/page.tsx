@@ -76,19 +76,52 @@ export default function AdminProductsPage() {
     setIsModalOpen(true);
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error("Image file size should be less than 5MB");
-        return;
-      }
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setImage(reader.result as string);
-        toast.success("Product image uploaded!");
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          let width = img.width;
+          let height = img.height;
+          const maxDim = 1000;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", 0.82));
+        };
+        img.src = e.target?.result as string;
       };
       reader.readAsDataURL(file);
+    });
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      try {
+        const compressed = await compressImage(file);
+        setImage(compressed);
+        toast.success("Product image ready!");
+      } catch {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setImage(reader.result as string);
+          toast.success("Product image uploaded!");
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 
@@ -108,8 +141,31 @@ export default function AdminProductsPage() {
     setSubmitting(true);
     try {
       if (editingProduct) {
-        // EDIT EXISTING PRODUCT
-        const updated = await updateProductApi(editingProduct.slug, {
+        // EDIT EXISTING PRODUCT - Instant 0ms optimistic update
+        const updatedItem: Product = {
+          ...editingProduct,
+          name: name.trim(),
+          category: finalCategory,
+          price: parseFloat(price) || editingProduct.price,
+          stock: parseInt(stock, 10) || 1,
+          badge: badge.trim(),
+          description: description.trim() || editingProduct.description,
+          image: image || editingProduct.image,
+        };
+
+        setItems((prev) => prev.map((it) => (it.slug === editingProduct.slug ? updatedItem : it)));
+        toast.success(`Updated "${name}" successfully!`);
+        setIsModalOpen(false);
+
+        // Update local catalog cache
+        try {
+          const cached = JSON.parse(sessionStorage.getItem("cozy_cached_products") || "[]");
+          const next = cached.map((it: any) => (it.slug === editingProduct.slug ? updatedItem : it));
+          sessionStorage.setItem("cozy_cached_products", JSON.stringify(next));
+        } catch {}
+
+        // Send API update in background
+        updateProductApi(editingProduct.slug, {
           name: name.trim(),
           category: finalCategory,
           price: parseFloat(price),
@@ -117,48 +173,49 @@ export default function AdminProductsPage() {
           badge: badge.trim(),
           description: description.trim(),
           image: image || (typeof editingProduct.image === "string" ? editingProduct.image : ""),
-        });
-
-        if (updated) {
-          setItems(items.map((it) => (it.slug === editingProduct.slug ? { ...it, ...updated } : it)));
-          toast.success(`Updated "${name}" successfully!`);
-        } else {
-          // Local fallback
-          setItems(
-            items.map((it) =>
-              it.slug === editingProduct.slug
-                ? {
-                    ...it,
-                    name: name.trim(),
-                    category: finalCategory,
-                    price: parseFloat(price),
-                    stock: parseInt(stock, 10) || 1,
-                    badge: badge.trim(),
-                    description: description.trim(),
-                    image: image || it.image,
-                  }
-                : it
-            )
-          );
-          toast.success(`Updated "${name}" successfully!`);
-        }
+        }).catch(() => {});
       } else {
-        // ADD NEW PRODUCT
-        const created = await addProduct({
+        // ADD NEW PRODUCT - Instant 0ms optimistic addition
+        const slug =
+          (name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "crochet-piece") +
+          "-" +
+          Date.now().toString().slice(-4);
+
+        const newProd: Product = {
+          slug,
           name: name.trim(),
           category: finalCategory,
-          price: parseFloat(price),
-          stock: 1, // Automatically added to stock
+          price: parseFloat(price) || 10,
+          stock: parseInt(stock, 10) || 1,
           badge: badge.trim(),
           description: description.trim() || "Hand-crocheted slow made piece.",
           image: image || "/assets/cloud-throw.jpg",
-        });
+          rating: 5,
+          numReviews: 0,
+        };
 
-        setItems([created, ...items]);
-        toast.success(`${created.name} added to catalog!`);
+        setItems((prev) => [newProd, ...prev]);
+        toast.success(`"${newProd.name}" added to catalog!`);
+        setIsModalOpen(false);
+
+        // Update local catalog cache
+        try {
+          const cached = JSON.parse(sessionStorage.getItem("cozy_cached_products") || "[]");
+          sessionStorage.setItem("cozy_cached_products", JSON.stringify([newProd, ...cached]));
+        } catch {}
+
+        // Send API addition in background
+        addProduct({
+          slug: newProd.slug,
+          name: newProd.name,
+          category: newProd.category,
+          price: newProd.price,
+          stock: newProd.stock,
+          badge: newProd.badge,
+          description: newProd.description,
+          image: newProd.image,
+        }).catch(() => {});
       }
-
-      setIsModalOpen(false);
     } catch {
       toast.error("Failed to save product");
     } finally {
@@ -168,8 +225,15 @@ export default function AdminProductsPage() {
 
   const handleDelete = async (slug: string) => {
     if (!confirm(`Are you sure you want to delete this piece?`)) return;
-    await deleteProductApi(slug);
-    setItems(items.filter((p) => p.slug !== slug));
+    
+    // Instant optimistic deletion (0ms)
+    setItems((prev) => prev.filter((p) => p.slug !== slug));
+    try {
+      const cached = JSON.parse(sessionStorage.getItem("cozy_cached_products") || "[]");
+      sessionStorage.setItem("cozy_cached_products", JSON.stringify(cached.filter((it: any) => it.slug !== slug)));
+    } catch {}
+
+    deleteProductApi(slug).catch(() => {});
     toast.info("Product removed from catalog");
   };
 

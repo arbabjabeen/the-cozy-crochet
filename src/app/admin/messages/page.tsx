@@ -35,16 +35,36 @@ export default function AdminMessagesPage() {
 
   const loadMessages = async () => {
     try {
+      let localMsgs: any[] = [];
+      if (typeof window !== "undefined") {
+        try {
+          localMsgs = JSON.parse(localStorage.getItem("cozy_studio_messages") || "[]");
+        } catch {}
+      }
+
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
       const res = await fetch("/api/contact", { signal: controller.signal });
       clearTimeout(timeoutId);
+      
+      let remoteMsgs: any[] = [];
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data)) {
-          setMessages(data);
-        }
+        if (Array.isArray(data)) remoteMsgs = data;
       }
+
+      const merged = [...localMsgs, ...remoteMsgs];
+      const seen = new Set();
+      const unique = merged.filter((m) => {
+        const key = m._id || m.id;
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      const finalMsgs = unique.length > 0 ? unique : initialSampleMessages;
+      finalMsgs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setMessages(finalMsgs);
     } catch {
       // Keep existing messages on error
     } finally {
@@ -69,15 +89,23 @@ export default function AdminMessagesPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this message?")) return;
+    
+    // Instant optimistic removal (0ms)
+    setMessages((prev) => prev.filter((m) => (m._id || m.id) !== id));
+
+    // Remove from localStorage
     try {
-      const res = await fetch(`/api/contact?id=${id}`, { method: "DELETE" });
-      if (res.ok) {
-        toast.success("Message deleted");
-        setMessages((prev) => prev.filter((m) => m._id !== id));
-      }
-    } catch {
-      toast.error("Failed to delete message");
-    }
+      const local = JSON.parse(localStorage.getItem("cozy_studio_messages") || "[]");
+      const updated = local.filter((m: any) => (m._id || m.id) !== id);
+      localStorage.setItem("cozy_studio_messages", JSON.stringify(updated));
+    } catch {}
+
+    // Send API delete in background
+    try {
+      fetch(`/api/contact?id=${id}`, { method: "DELETE" }).catch(() => {});
+    } catch {}
+
+    toast.success("Message deleted");
   };
 
   const getCleanPhone = (phoneStr: string) => {

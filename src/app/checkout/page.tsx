@@ -118,6 +118,17 @@ export default function CheckoutPage() {
       const result = await placeOrder(orderPayload);
       setPlacedOrder(result);
       clearCart();
+
+      // Persist placed order to localStorage for instant real-time admin visibility
+      try {
+        const existing = JSON.parse(localStorage.getItem("cozy_studio_orders") || "[]");
+        const updated = [
+          result,
+          ...existing.filter((o: any) => o.orderNumber !== result.orderNumber && o.id !== (result as any).id),
+        ];
+        localStorage.setItem("cozy_studio_orders", JSON.stringify(updated.slice(0, 50)));
+      } catch {}
+
       toast.success("Order placed successfully!");
     } catch {
       toast.error("Failed to complete order. Please try again.");

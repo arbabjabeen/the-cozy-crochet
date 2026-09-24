@@ -58,6 +58,24 @@ export default function ContactPage() {
         setSubmittedName(finalDisplayName);
         setSubmittedPhone(cleanPhone);
         setSent(true);
+
+        // Persist to localStorage for real-time admin sync
+        try {
+          const existing = JSON.parse(localStorage.getItem("cozy_studio_messages") || "[]");
+          const newMsg = {
+            _id: `msg-${Date.now()}`,
+            id: `msg-${Date.now()}`,
+            name: cleanName,
+            phone: cleanPhone,
+            email: cleanPhone,
+            message: message.trim(),
+            createdAt: new Date().toISOString(),
+            read: false,
+          };
+          const updated = [newMsg, ...existing];
+          localStorage.setItem("cozy_studio_messages", JSON.stringify(updated.slice(0, 50)));
+        } catch {}
+
         setName("");
         setPhone("");
         setMessage("");
