@@ -248,8 +248,17 @@ export default function AdminOrdersPage() {
 
   useEffect(() => {
     loadAllOrders();
-    const interval = setInterval(loadAllOrders, 3500);
-    return () => clearInterval(interval);
+    const handleFocus = () => loadAllOrders();
+    window.addEventListener("focus", handleFocus);
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        loadAllOrders();
+      }
+    }, 15000);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+    };
   }, []);
 
   const formatWhatsAppPhone = (rawPhone: string): string => {

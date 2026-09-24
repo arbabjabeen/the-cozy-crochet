@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMessages, addMessage, deleteMessages } from "@/lib/server/db";
+import { sendAdminContactNotification } from "@/lib/server/email";
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,6 +15,9 @@ export async function POST(request: NextRequest) {
     }
 
     const newMessage = await addMessage({ name, phone, email, message });
+    sendAdminContactNotification({ name, phone: contactPhone, email, message }).catch((e) =>
+      console.warn("Contact notification email error:", e)
+    );
     return NextResponse.json({ success: true, message: newMessage });
   } catch (err: any) {
     return NextResponse.json({ message: "Failed to save message", error: err.message }, { status: 500 });

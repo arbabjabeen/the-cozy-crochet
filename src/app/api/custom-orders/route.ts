@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCustomOrders, createCustomOrder } from "@/lib/server/db";
 import { sendNotification } from "@/lib/server/store";
+import { sendAdminCustomOrderNotification } from "@/lib/server/email";
 
 export async function GET() {
   try {
@@ -25,6 +26,17 @@ export async function POST(request: NextRequest) {
 
     const newCustomOrder = await createCustomOrder(body);
     const notif = sendNotification(newCustomOrder);
+
+    sendAdminCustomOrderNotification({
+      customOrderId: newCustomOrder.customOrderId || newCustomOrder._id,
+      customerName: newCustomOrder.customerName,
+      customerPhone: newCustomOrder.customerPhone,
+      customerEmail: newCustomOrder.customerEmail,
+      productType: newCustomOrder.productType,
+      colorPreference: newCustomOrder.colorPreference,
+      instructions: newCustomOrder.instructions,
+      quantity: newCustomOrder.quantity,
+    }).catch((e) => console.warn("Admin custom order email notification error:", e));
 
     return NextResponse.json(
       {

@@ -110,10 +110,25 @@ const initialData: StoreData = {
   ],
 };
 
+const TMP_FILE = path.join(typeof process !== "undefined" && process.platform === "win32" ? process.cwd() : "/tmp", "cozy_crochet_runtime.json");
+
 let memoryStore: StoreData | null = null;
 
 export const loadStore = (): StoreData => {
   try {
+    // 1. Try to load from runtime file first (persists dynamic changes on Vercel!)
+    if (fs.existsSync(TMP_FILE)) {
+      const data = fs.readFileSync(TMP_FILE, "utf-8");
+      const parsed = JSON.parse(data);
+      if (parsed && Array.isArray(parsed.products) && parsed.products.length > 0) {
+        memoryStore = parsed;
+        return memoryStore!;
+      }
+    }
+  } catch {}
+
+  try {
+    // 2. Otherwise load baseline from git repository data file
     if (fs.existsSync(DATA_FILE)) {
       const data = fs.readFileSync(DATA_FILE, "utf-8");
       memoryStore = JSON.parse(data);
@@ -121,6 +136,7 @@ export const loadStore = (): StoreData => {
   } catch (err: any) {
     console.warn("Could not load DATA_FILE:", err.message);
   }
+
   if (!memoryStore) {
     memoryStore = { ...initialData, messages: [] };
   }
@@ -131,12 +147,21 @@ export const loadStore = (): StoreData => {
 };
 
 export const saveStore = () => {
+  if (!memoryStore) return;
+  // 1. Try writing to local repository file (works in local dev)
   try {
     const dir = path.dirname(DATA_FILE);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(DATA_FILE, JSON.stringify(memoryStore, null, 2), "utf-8");
+  } catch {
+    // Expected on Vercel read-only filesystem
+  }
+
+  // 2. Always write to runtime file (persists on Vercel lambda container!)
+  try {
+    fs.writeFileSync(TMP_FILE, JSON.stringify(memoryStore, null, 2), "utf-8");
   } catch (err: any) {
-    console.warn("Could not save to file store, staying in-memory:", err.message);
+    console.warn("Could not save to runtime file:", err.message);
   }
 };
 

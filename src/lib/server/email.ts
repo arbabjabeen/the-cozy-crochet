@@ -331,3 +331,99 @@ Subject: 🌸 Welcome to The Cozy Crochet Studio Letters! 🧶
     return { success: true, simulated: true, error: error.message };
   }
 }
+
+export async function sendAdminContactNotification(msg: {
+  name: string;
+  phone?: string;
+  email?: string;
+  message: string;
+}) {
+  const siteUrl = getBaseSiteUrl();
+  const phoneClean = (msg.phone || "").replace(/\D/g, "");
+  const waNumber = phoneClean.startsWith("0") ? "92" + phoneClean.slice(1) : phoneClean;
+  const waUrl = waNumber ? `https://wa.me/${waNumber}` : "";
+
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #ebd9c8; border-radius: 16px; padding: 24px;">
+      <h2 style="color: #884b2c; margin-top: 0;">💬 New Customer Inquiry on The Cozy Crochet!</h2>
+      <p style="font-size: 14px; color: #5f5348;">A customer just submitted a message through your website contact form:</p>
+      
+      <div style="background: #fbf8f4; border-left: 4px solid #884b2c; padding: 16px; border-radius: 8px; margin: 16px 0;">
+        <p style="margin: 4px 0;"><strong>Name:</strong> ${msg.name}</p>
+        <p style="margin: 4px 0;"><strong>Phone/WhatsApp:</strong> ${msg.phone || "Not provided"}</p>
+        <p style="margin: 4px 0;"><strong>Email:</strong> ${msg.email || "Not provided"}</p>
+        <p style="margin: 12px 0 4px 0;"><strong>Message:</strong></p>
+        <p style="margin: 0; padding: 12px; background: #ffffff; border-radius: 6px; font-size: 14px; color: #2b2520; white-space: pre-wrap; border: 1px solid #eee;">${msg.message}</p>
+      </div>
+
+      <div style="margin: 20px 0; text-align: center;">
+        ${waUrl ? `<a href="${waUrl}" style="display: inline-block; background: #25D366; color: #ffffff; padding: 12px 22px; border-radius: 10px; text-decoration: none; font-weight: bold; margin: 4px;">Reply on WhatsApp 💬</a>` : ""}
+        <a href="${siteUrl}/admin/messages" style="display: inline-block; background: #884b2c; color: #ffffff; padding: 12px 22px; border-radius: 10px; text-decoration: none; font-weight: bold; margin: 4px;">View in Studio Admin →</a>
+      </div>
+    </div>
+  `;
+
+  try {
+    const transporter = await getTransporter();
+    await transporter.sendMail({
+      from: `"${STORE_NAME} Alerts" <${STORE_OWNER_EMAIL}>`,
+      to: STORE_OWNER_EMAIL,
+      subject: `🔔 [Customer Message] ${msg.name}: "${msg.message.slice(0, 40)}"`,
+      html,
+    });
+    console.log("Admin contact notification dispatched to:", STORE_OWNER_EMAIL);
+  } catch (err: any) {
+    console.warn("Could not dispatch admin contact notification email:", err.message);
+  }
+}
+
+export async function sendAdminCustomOrderNotification(co: {
+  customOrderId: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string;
+  productType: string;
+  colorPreference: string;
+  instructions?: string;
+  quantity?: number;
+}) {
+  const siteUrl = getBaseSiteUrl();
+  const phoneClean = (co.customerPhone || "").replace(/\D/g, "");
+  const waNumber = phoneClean.startsWith("0") ? "92" + phoneClean.slice(1) : phoneClean;
+  const waUrl = waNumber ? `https://wa.me/${waNumber}` : "";
+
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #ebd9c8; border-radius: 16px; padding: 24px;">
+      <h2 style="color: #884b2c; margin-top: 0;">✨ New Bespoke Custom Order Request!</h2>
+      <p style="font-size: 14px; color: #5f5348;">A customer requested a handmade crochet commission (${co.customOrderId}):</p>
+      
+      <div style="background: #fbf8f4; border-left: 4px solid #884b2c; padding: 16px; border-radius: 8px; margin: 16px 0;">
+        <p style="margin: 4px 0;"><strong>Customer:</strong> ${co.customerName}</p>
+        <p style="margin: 4px 0;"><strong>Phone/WhatsApp:</strong> ${co.customerPhone}</p>
+        <p style="margin: 4px 0;"><strong>Piece Type:</strong> ${co.productType}</p>
+        <p style="margin: 4px 0;"><strong>Quantity:</strong> ${co.quantity || 1}</p>
+        <p style="margin: 4px 0;"><strong>Color Palette:</strong> ${co.colorPreference}</p>
+        <p style="margin: 12px 0 4px 0;"><strong>Special Instructions:</strong></p>
+        <p style="margin: 0; padding: 12px; background: #ffffff; border-radius: 6px; font-size: 14px; color: #2b2520; border: 1px solid #eee;">${co.instructions || "Standard design requested"}</p>
+      </div>
+
+      <div style="margin: 20px 0; text-align: center;">
+        ${waUrl ? `<a href="${waUrl}" style="display: inline-block; background: #25D366; color: #ffffff; padding: 12px 22px; border-radius: 10px; text-decoration: none; font-weight: bold; margin: 4px;">Chat on WhatsApp 💬</a>` : ""}
+        <a href="${siteUrl}/admin/orders" style="display: inline-block; background: #884b2c; color: #ffffff; padding: 12px 22px; border-radius: 10px; text-decoration: none; font-weight: bold; margin: 4px;">Review in Studio Admin →</a>
+      </div>
+    </div>
+  `;
+
+  try {
+    const transporter = await getTransporter();
+    await transporter.sendMail({
+      from: `"${STORE_NAME} Alerts" <${STORE_OWNER_EMAIL}>`,
+      to: STORE_OWNER_EMAIL,
+      subject: `🌸 [New Custom Order] ${co.customOrderId} - ${co.productType} by ${co.customerName}`,
+      html,
+    });
+    console.log("Admin custom order notification dispatched to:", STORE_OWNER_EMAIL);
+  } catch (err: any) {
+    console.warn("Could not dispatch admin custom order notification:", err.message);
+  }
+}

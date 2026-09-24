@@ -54,8 +54,17 @@ export default function AdminMessagesPage() {
 
   useEffect(() => {
     loadMessages();
-    const interval = setInterval(loadMessages, 3000);
-    return () => clearInterval(interval);
+    const handleFocus = () => loadMessages();
+    window.addEventListener("focus", handleFocus);
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        loadMessages();
+      }
+    }, 15000);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+    };
   }, []);
 
   const handleDelete = async (id: string) => {

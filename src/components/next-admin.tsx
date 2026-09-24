@@ -263,8 +263,17 @@ export function AdminShell({
     };
 
     fetchCounts();
-    const interval = setInterval(fetchCounts, 3000);
-    return () => clearInterval(interval);
+    const handleFocus = () => fetchCounts();
+    window.addEventListener("focus", handleFocus);
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        fetchCounts();
+      }
+    }, 20000);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+    };
   }, []);
 
   const totalNotifications = counts.orders + counts.customOrders + counts.messages;
