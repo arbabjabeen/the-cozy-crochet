@@ -419,7 +419,7 @@ export function ProductCard({
 
   const handleBuyNow = (e: React.MouseEvent) => {
     e.preventDefault();
-    addToCart(product, 1);
+    addToCart(product, 1, undefined, true);
     router.push("/checkout");
   };
 

@@ -263,7 +263,7 @@ export function AdminShell({
     };
 
     fetchCounts();
-    const interval = setInterval(fetchCounts, 10000);
+    const interval = setInterval(fetchCounts, 3000);
     return () => clearInterval(interval);
   }, []);
 

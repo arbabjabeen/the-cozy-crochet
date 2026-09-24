@@ -41,12 +41,12 @@ export default function AdminMessagesPage() {
       clearTimeout(timeoutId);
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setMessages(data);
         }
       }
     } catch {
-      // Keep initial messages
+      // Keep existing messages on error
     } finally {
       setLoading(false);
     }
@@ -54,6 +54,8 @@ export default function AdminMessagesPage() {
 
   useEffect(() => {
     loadMessages();
+    const interval = setInterval(loadMessages, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleDelete = async (id: string) => {

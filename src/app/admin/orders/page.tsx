@@ -248,6 +248,8 @@ export default function AdminOrdersPage() {
 
   useEffect(() => {
     loadAllOrders();
+    const interval = setInterval(loadAllOrders, 3500);
+    return () => clearInterval(interval);
   }, []);
 
   const formatWhatsAppPhone = (rawPhone: string): string => {

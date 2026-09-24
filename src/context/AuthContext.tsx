@@ -61,9 +61,9 @@ const DEFAULT_STUDIO_ADMIN: User = {
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // Default to AJ so studio owner has instant 0ms access without spinners or lockouts
-  const [user, setUser] = useState<User | null>(DEFAULT_STUDIO_ADMIN);
-  const [token, setToken] = useState<string | null>("token-aj-admin");
+  // Default to null so customer sees clean storefront and blank checkout fields
+  const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(true);
 
   useEffect(() => {
@@ -78,8 +78,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           parsed.name = "AJ (Studio Maker)";
         }
         setUser(parsed);
-      } else {
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(DEFAULT_STUDIO_ADMIN));
       }
       const savedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
       if (savedToken) {
@@ -87,8 +85,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch {
       // ignore
-    } finally {
-      setInitialized(true);
     }
   }, []);
 

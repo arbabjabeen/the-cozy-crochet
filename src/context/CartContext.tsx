@@ -12,7 +12,7 @@ export type CartItem = {
 
 type CartContextType = {
   items: CartItem[];
-  addToCart: (product: Product, quantity?: number, color?: string) => void;
+  addToCart: (product: Product, quantity?: number, color?: string, silent?: boolean) => void;
   removeFromCart: (slug: string) => void;
   updateQuantity: (slug: string, delta: number) => void;
   clearCart: () => void;
@@ -64,7 +64,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, [items, isLoaded]);
 
-  const addToCart = (product: Product, quantity = 1, color = "Sage") => {
+  const addToCart = (product: Product, quantity = 1, color = "Sage", silent = false) => {
     setItems((prev) => {
       const existingIdx = prev.findIndex((item) => item.product.slug === product.slug);
       if (existingIdx > -1) {
@@ -80,9 +80,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       return [...prev, { product, quantity, color }];
     });
 
-    toast.success(`${product.name} added to your bag!`, {
-      description: `Quantity: ${quantity} · Complimentary wrap included.`,
-    });
+    if (!silent) {
+      toast.success(`${product.name} added to your bag!`, {
+        description: `Quantity: ${quantity} · Complimentary wrap included.`,
+      });
+    }
   };
 
   const removeFromCart = (slug: string) => {

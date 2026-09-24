@@ -87,6 +87,7 @@ export type StoreData = {
   inventory: any[];
   users: UserItem[];
   subscribers?: { email: string; date: string }[];
+  messages?: any[];
 };
 
 const initialData: StoreData = {
@@ -95,6 +96,7 @@ const initialData: StoreData = {
   orders: [],
   customOrders: [],
   inventory: [],
+  messages: [],
   users: [
     {
       _id: "usr-admin",
@@ -108,16 +110,22 @@ const initialData: StoreData = {
   ],
 };
 
-let memoryStore: StoreData = { ...initialData };
+let memoryStore: StoreData | null = null;
 
-export const loadStore = () => {
+export const loadStore = (): StoreData => {
   try {
     if (fs.existsSync(DATA_FILE)) {
       const data = fs.readFileSync(DATA_FILE, "utf-8");
       memoryStore = JSON.parse(data);
     }
-  } catch {
-    memoryStore = { ...initialData };
+  } catch (err: any) {
+    console.warn("Could not load DATA_FILE:", err.message);
+  }
+  if (!memoryStore) {
+    memoryStore = { ...initialData, messages: [] };
+  }
+  if (!memoryStore.messages) {
+    memoryStore.messages = [];
   }
   return memoryStore;
 };
@@ -132,20 +140,11 @@ export const saveStore = () => {
   }
 };
 
-export const getStore = () => {
+export const getStore = (): StoreData => {
   if (!memoryStore) {
-    if (fs.existsSync(DATA_FILE)) {
-      try {
-        const data = fs.readFileSync(DATA_FILE, "utf-8");
-        memoryStore = JSON.parse(data);
-      } catch {
-        memoryStore = { ...initialData };
-      }
-    } else {
-      memoryStore = { ...initialData };
-    }
+    loadStore();
   }
-  return memoryStore;
+  return memoryStore!;
 };
 
 export const sendNotification = (orderData: any) => {

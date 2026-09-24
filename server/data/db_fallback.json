@@ -375,6 +375,37 @@
   ],
   "orders": [
     {
+      "_id": "ord-1790263780104",
+      "orderNumber": "#CC-7759",
+      "customer": {
+        "name": "Customer Fatima",
+        "email": "fatima@customer.com",
+        "phone": "03219876543"
+      },
+      "items": [
+        {
+          "slug": "rose-bouquet-keychain",
+          "name": "Rose Bouquet Keychain",
+          "price": 5,
+          "quantity": 1
+        }
+      ],
+      "shippingAddress": {
+        "fullName": "Customer Fatima",
+        "street": "House 12, Street 3",
+        "city": "Lahore",
+        "postalCode": "54000"
+      },
+      "paymentMethod": "WhatsApp / Direct Transfer",
+      "subtotal": 5,
+      "giftWrap": false,
+      "total": 5,
+      "status": "Processing",
+      "isPaid": false,
+      "orderType": "regular",
+      "createdAt": "2026-09-24T15:29:40.104Z"
+    },
+    {
       "_id": "ord-1790232438411",
       "orderNumber": "#CC-2288",
       "customer": {
@@ -624,6 +655,15 @@
     }
   ],
   "messages": [
+    {
+      "_id": "msg-1790263780063",
+      "name": "Zoya Customer Test",
+      "phone": "03001234567",
+      "email": "03001234567",
+      "message": "Assalam-o-Alaikum AJ, instant message test!",
+      "createdAt": "2026-09-24T15:29:40.063Z",
+      "read": false
+    },
     {
       "_id": "msg-demo-1",
       "id": "msg-demo-1",

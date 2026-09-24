@@ -30,9 +30,9 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [placedOrder, setPlacedOrder] = useState<any | null>(null);
 
-  // Pre-fill user information if logged in
+  // Pre-fill user information ONLY if logged in as a normal buyer/customer (never admin AJ)
   useEffect(() => {
-    if (user) {
+    if (user && user.role !== "admin" && user.email !== "arbabjabeen2006@gmail.com") {
       if (!fullName) setFullName(user.name || "");
       if (!email) setEmail(user.email || "");
       if (!phone && user.phone) setPhone(user.phone || "");
@@ -80,16 +80,15 @@ export default function CheckoutPage() {
     // Default email if user didn't provide one
     const cleanEmail =
       email.trim() ||
-      user?.email ||
       `customer-${cleanPhone.replace(/\D/g, "").slice(-7) || Date.now()}@cozycrochet.com`;
 
     setSubmitting(true);
     try {
       const orderPayload = {
         customer: {
-          name: cleanFullName || user?.name || "Valued Customer",
+          name: cleanFullName,
           email: cleanEmail,
-          phone: cleanPhone || user?.phone || "",
+          phone: cleanPhone,
         },
         items: items.map((i) => {
           const imgSrc =

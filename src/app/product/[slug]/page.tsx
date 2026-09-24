@@ -302,7 +302,7 @@ export default function ProductDetailPage() {
                 className="w-full sm:flex-1 py-5 sm:py-6 text-sm sm:text-base font-bold shadow-md bg-emerald-700 hover:bg-emerald-800 text-white"
                 onClick={() => {
                   if (product) {
-                    addToCart(product, qty);
+                    addToCart(product, qty, undefined, true);
                     router.push("/checkout");
                   }
                 }}
