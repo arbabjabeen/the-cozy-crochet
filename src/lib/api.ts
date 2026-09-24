@@ -211,7 +211,10 @@ export async function placeOrder(order: OrderPayload) {
 
 export async function fetchOrders() {
   try {
-    const res = await fetch(`${API_BASE}/orders`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(`${API_BASE}/orders`, { signal: controller.signal });
+    clearTimeout(timeoutId);
     if (res.ok) return await res.json();
   } catch {
     // fallback
@@ -288,7 +291,10 @@ export async function submitCustomOrder(payload: CustomOrderPayload) {
 
 export async function fetchCustomOrders() {
   try {
-    const res = await fetch(`${API_BASE}/custom-orders`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(`${API_BASE}/custom-orders`, { signal: controller.signal });
+    clearTimeout(timeoutId);
     if (res.ok) return await res.json();
   } catch {
     // fallback
@@ -322,7 +328,10 @@ export async function updateCustomOrderStatusApi(
 // INVENTORY & ANALYTICS
 export async function fetchInventory() {
   try {
-    const res = await fetch(`${API_BASE}/inventory`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(`${API_BASE}/inventory`, { signal: controller.signal });
+    clearTimeout(timeoutId);
     if (res.ok) return await res.json();
   } catch {
     // fallback
@@ -332,7 +341,10 @@ export async function fetchInventory() {
 
 export async function fetchAnalytics() {
   try {
-    const res = await fetch(`${API_BASE}/analytics`);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(`${API_BASE}/analytics`, { signal: controller.signal });
+    clearTimeout(timeoutId);
     if (res.ok) return await res.json();
   } catch {
     // fallback

@@ -76,8 +76,8 @@ export async function ensureDbInitialized(): Promise<boolean> {
     }
 
     try {
-      // Fast probe: check if tables already exist and have products to avoid repeating DDL on every cold start
-      const probeRes = await pool.query("SELECT 1 FROM products LIMIT 1").catch(() => null);
+      // Fast probe: check if products, orders, and messages tables all exist
+      const probeRes = await pool.query("SELECT 1 FROM products, orders, messages LIMIT 1").catch(() => null);
       if (probeRes) {
         dbInitialized = true;
         return true;
@@ -370,6 +370,19 @@ export async function ensureDbInitialized(): Promise<boolean> {
               }
             } catch {}
           }
+        }
+
+        // Seed Messages if table is empty
+        const msgCheck = await pool.query("SELECT COUNT(*) FROM messages").catch(() => ({ rows: [{ count: '0' }] }));
+        const msgCount = parseInt(msgCheck.rows[0]?.count || '0', 10);
+        if (msgCount === 0) {
+          await pool.query(`
+            INSERT INTO messages (id, name, phone, email, message, read, created_at)
+            VALUES 
+              ('msg-demo-1', 'Ayesha Khan', '+92 301 2345678', 'ayesha.k@gmail.com', 'Assalam-o-Alaikum AJ! Can you make the lilac cardigan in powder blue color for next week?', false, NOW() - INTERVAL '2 hours'),
+              ('msg-demo-2', 'Fatima Zahra', '+92 321 9876543', 'fatima.z@hotmail.com', 'Loved the strawberry keychain! Ordered 2 more for my sister as a gift.', false, NOW() - INTERVAL '1 day')
+            ON CONFLICT (id) DO NOTHING;
+          `);
         }
 
         console.log("✅ PostgreSQL initial data seeded successfully!");

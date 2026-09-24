@@ -22,6 +22,8 @@ import {
   ArrowRight,
   Lock,
   ShieldCheck,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
@@ -39,6 +41,141 @@ const links = [
 ] as const;
 
 
+
+function AdminLoginForm() {
+  const { login } = useAuth();
+  const [email, setEmail] = useState("arbabjabeen2006@gmail.com");
+  const [password, setPassword] = useState("aj1234qwerty");
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const res = await login(email.trim(), password.trim());
+      if (!res.success) {
+        setError(res.message || "Invalid admin credentials");
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleQuickLogin = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await login("arbabjabeen2006@gmail.com", "aj1234qwerty");
+      if (!res.success) {
+        // Fallback to demo admin
+        await login("admin@cozycrochet.com", "adminpassword123");
+      }
+    } catch {
+      setError("Could not complete quick login. Please type your password.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-dashboard flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8">
+      <div className="sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="rounded-3xl border border-border bg-card p-6 sm:p-8 shadow-xl space-y-6">
+          <div className="text-center space-y-2">
+            <div className="size-14 mx-auto rounded-2xl bg-primary/10 text-primary flex items-center justify-center shadow-xs">
+              <Lock className="size-7" />
+            </div>
+            <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-accent">
+              Studio Admin Portal
+            </span>
+            <h1 className="font-display text-2xl sm:text-3xl font-medium text-foreground">
+              Sign In to Admin
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              Enter your credentials or tap 1-Click Quick Access below.
+            </p>
+          </div>
+
+          {error && (
+            <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-xs text-destructive text-center font-medium">
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-foreground mb-1">
+                Admin Email
+              </label>
+              <Input
+                required
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="h-10 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-foreground mb-1">
+                Password
+              </label>
+              <div className="relative">
+                <Input
+                  required
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="h-10 pr-10 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 cursor-pointer"
+                  aria-label="Toggle password"
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+            </div>
+
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full py-5 font-bold text-sm shadow-md cursor-pointer"
+            >
+              {loading ? "Verifying..." : "Log In to Studio Admin"}
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              disabled={loading}
+              onClick={handleQuickLogin}
+              className="w-full py-4 text-xs font-bold text-primary border-primary/30 hover:bg-primary/5 cursor-pointer"
+            >
+              <ShieldCheck className="mr-1.5 size-4" /> 1-Click Quick Access as AJ
+            </Button>
+          </form>
+
+          <div className="pt-2 border-t border-border text-center">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              ← Return to Storefront
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function AdminShell({
   title,
@@ -181,33 +318,32 @@ export function AdminShell({
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-3">
           <div className="size-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs text-muted-foreground font-medium animate-pulse">Loading...</p>
+          <p className="text-xs text-muted-foreground font-medium animate-pulse">Loading Studio Admin...</p>
         </div>
       </div>
     );
   }
 
-  useEffect(() => {
-    if (initialized && !isAdmin) {
-      router.replace("/");
-    }
-  }, [initialized, isAdmin, router]);
-
   if (!isAdmin) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="size-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <AdminLoginForm />;
   }
 
   return (
     <div className="min-h-screen bg-dashboard text-foreground lg:grid lg:grid-cols-[240px_1fr]">
+      {/* Mobile Drawer Backdrop */}
+      {open && (
+        <div
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs lg:hidden transition-opacity duration-200"
+          onClick={() => setOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       {/* Sidebar */}
       <aside
         className={`${
-          open ? "flex" : "hidden"
-        } fixed inset-0 z-50 flex-col border-r border-border bg-card p-4 lg:sticky lg:top-0 lg:flex lg:h-screen`}
+          open ? "translate-x-0" : "-translate-x-full"
+        } fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r border-border bg-card p-4 transition-transform duration-300 lg:sticky lg:top-0 lg:flex lg:h-screen lg:w-60 lg:translate-x-0`}
       >
         <div className="flex items-center justify-between px-2 py-3">
           <Link href="/" className="font-display text-xl font-medium">
@@ -627,10 +763,10 @@ export function StatCard({
   tone?: "good" | "warn";
 }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-5 shadow-xs">
-      <p className="text-xs font-semibold text-muted-foreground">{label}</p>
-      <p className="mt-2 font-display text-3xl font-medium">{value}</p>
-      <p className={`mt-2 text-xs font-bold ${tone === "good" ? "text-primary" : "text-accent"}`}>
+    <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-xs">
+      <p className="text-[11px] sm:text-xs font-semibold text-muted-foreground">{label}</p>
+      <p className="mt-1.5 sm:mt-2 font-display text-2xl sm:text-3xl font-medium">{value}</p>
+      <p className={`mt-1.5 sm:mt-2 text-[11px] sm:text-xs font-bold ${tone === "good" ? "text-primary" : "text-accent"}`}>
         {change}
       </p>
     </div>
@@ -647,12 +783,12 @@ export function AdminTable({
   loading?: boolean;
 }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-xs">
-      <table className="w-full min-w-[680px] text-left text-sm">
-        <thead className="border-b border-border bg-secondary/60 text-xs uppercase tracking-wider text-muted-foreground">
+    <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-xs -mx-1 sm:mx-0">
+      <table className="w-full min-w-[620px] text-left text-xs sm:text-sm">
+        <thead className="border-b border-border bg-secondary/60 text-[10px] sm:text-xs uppercase tracking-wider text-muted-foreground">
           <tr>
             {headers.map((h) => (
-              <th className="px-4 py-3 font-bold" key={h}>
+              <th className="px-3 sm:px-4 py-3 font-bold" key={h}>
                 {h}
               </th>
             ))}

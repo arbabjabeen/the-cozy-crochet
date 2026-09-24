@@ -133,11 +133,17 @@ export const saveStore = () => {
 };
 
 export const getStore = () => {
-  if (fs.existsSync(DATA_FILE)) {
-    try {
-      const data = fs.readFileSync(DATA_FILE, "utf-8");
-      memoryStore = JSON.parse(data);
-    } catch { }
+  if (!memoryStore) {
+    if (fs.existsSync(DATA_FILE)) {
+      try {
+        const data = fs.readFileSync(DATA_FILE, "utf-8");
+        memoryStore = JSON.parse(data);
+      } catch {
+        memoryStore = { ...initialData };
+      }
+    } else {
+      memoryStore = { ...initialData };
+    }
   }
   return memoryStore;
 };
