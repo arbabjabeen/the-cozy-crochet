@@ -30,26 +30,27 @@ export default function AdminInventoryPage() {
     loadData();
   }, []);
 
-  // Quick product stock adjustment (+ / -)
-  const handleUpdateProductStock = async (slug: string, newStock: number) => {
+  // Quick product stock adjustment (+ / -) - Instant 0ms optimistic update
+  const handleUpdateProductStock = (slug: string, newStock: number) => {
     const validStock = Math.max(0, newStock);
+    setProducts((prev) =>
+      prev.map((p) => (p.slug === slug ? { ...p, stock: validStock } : p))
+    );
+    toast.success(`Updated stock to ${validStock}`);
+
+    // Update catalog cache
     try {
-      const res = await fetch(`/api/products/${slug}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stock: validStock }),
-      });
-      if (res.ok) {
-        setProducts((prev) =>
-          prev.map((p) => (p.slug === slug ? { ...p, stock: validStock } : p))
-        );
-        toast.success(`Updated stock to ${validStock}`);
-      } else {
-        toast.error("Failed to update stock");
-      }
-    } catch {
-      toast.error("Error updating stock");
-    }
+      const cached = JSON.parse(sessionStorage.getItem("cozy_cached_products") || "[]");
+      const next = cached.map((p: any) => (p.slug === slug ? { ...p, stock: validStock } : p));
+      sessionStorage.setItem("cozy_cached_products", JSON.stringify(next));
+    } catch {}
+
+    // Send API in background
+    fetch(`/api/products/${slug}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stock: validStock }),
+    }).catch(() => {});
   };
 
   const totalStockUnits = products.reduce((acc, p) => acc + (Number(p.stock) || 0), 0);

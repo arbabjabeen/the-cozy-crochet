@@ -45,12 +45,27 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    let localOrders: any[] = [];
+    if (typeof window !== "undefined") {
+      try {
+        localOrders = JSON.parse(localStorage.getItem("cozy_studio_orders") || "[]");
+      } catch {}
+    }
+
     Promise.all([
       fetchAnalytics().then((s) => {
         if (s && s.orders !== undefined) setStats(s);
       }),
       fetchOrders().then((data) => {
-        if (data && data.length > 0) setOrders(data.slice(0, 5));
+        const merged = [...localOrders, ...(data || [])];
+        const seen = new Set();
+        const unique = merged.filter((o: any) => {
+          const k = o.orderNumber || o.id || o._id;
+          if (!k || seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+        if (unique.length > 0) setOrders(unique.slice(0, 5));
       }),
       fetchCustomOrders().then((data) => {
         if (data && data.length > 0) setCustomOrdersCount(data.length);
