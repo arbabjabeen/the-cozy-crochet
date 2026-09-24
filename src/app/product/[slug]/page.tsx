@@ -57,7 +57,7 @@ export default function ProductDetailPage() {
 
   useEffect(() => {
     if (slug) {
-      setLoading(true);
+      if (!product) setLoading(true);
       fetchProductBySlug(slug)
         .then((p) => {
           if (p) {
