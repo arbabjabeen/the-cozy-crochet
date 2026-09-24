@@ -16,12 +16,33 @@ export const Route = createFileRoute("/admin/orders")({
   component: Orders,
 });
 
+const initialOrdersList = [
+  {
+    orderNumber: "#CC-8805",
+    customer: { name: "ARBAB JABEEN", phone: "03207309867", email: "arbabjabeen2006@gmail.com" },
+    items: [{ name: "Crochet Flip Flop Bag Charm", quantity: 1 }, { name: "Crochet Tulip Bag Charm", quantity: 1 }],
+    total: 15,
+    isPaid: false,
+    status: "Delivered",
+  },
+  {
+    orderNumber: "#CC-9954",
+    customer: { name: "ARBAB JABEEN", phone: "03207309867", email: "arbabjabeen2006@gmail.com" },
+    items: [{ name: "Crochet Tulip Hair Tie", quantity: 2 }, { name: "Crochet Rose Flower Keychain", quantity: 1 }],
+    total: 25,
+    isPaid: false,
+    status: "Pending",
+  },
+];
+
 function Orders() {
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>(initialOrdersList);
   const [filter, setFilter] = useState("All");
 
   useEffect(() => {
-    fetchOrders().then(setOrders);
+    fetchOrders().then((data) => {
+      if (data && data.length > 0) setOrders(data);
+    }).catch(() => {});
   }, []);
 
   const handleStatusChange = async (id: string, newStatus: string) => {

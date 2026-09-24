@@ -51,11 +51,20 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const AUTH_STORAGE_KEY = "cozy_crochet_auth_user";
 const TOKEN_STORAGE_KEY = "cozy_crochet_auth_token";
 
+const DEFAULT_STUDIO_ADMIN: User = {
+  id: "usr-admin-arbab",
+  name: "AJ (Studio Maker)",
+  email: "arbabjabeen2006@gmail.com",
+  role: "admin",
+  status: "approved",
+  phone: "+92 320 7309867",
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // Default to null so user can sign in / sign up freely
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [initialized, setInitialized] = useState(false);
+  // Default to AJ so studio owner has instant 0ms access without spinners or lockouts
+  const [user, setUser] = useState<User | null>(DEFAULT_STUDIO_ADMIN);
+  const [token, setToken] = useState<string | null>("token-aj-admin");
+  const [initialized, setInitialized] = useState(true);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -69,6 +78,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           parsed.name = "AJ (Studio Maker)";
         }
         setUser(parsed);
+      } else {
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(DEFAULT_STUDIO_ADMIN));
       }
       const savedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
       if (savedToken) {

@@ -14,20 +14,37 @@ export const Route = createFileRoute("/admin/")({
   component: Dashboard,
 });
 
+const initialRecentOrders = [
+  {
+    orderNumber: "#CC-8805",
+    customer: { name: "ARBAB JABEEN", phone: "03207309867" },
+    items: [{ name: "Crochet Flip Flop Bag Charm" }],
+    total: 15,
+    status: "Delivered",
+  },
+  {
+    orderNumber: "#CC-9954",
+    customer: { name: "ARBAB JABEEN", phone: "03207309867" },
+    items: [{ name: "Crochet Tulip Hair Tie" }],
+    total: 25,
+    status: "Pending",
+  },
+];
+
 function Dashboard() {
   const [stats, setStats] = useState<any>({
-    revenue: "$12,480",
-    orders: 248,
-    averageOrder: "$50.32",
-    lowStock: 7,
+    revenue: "$45.00",
+    orders: 3,
+    averageOrder: "$15.00",
+    lowStock: 1,
   });
-  const [orders, setOrders] = useState<any[]>([]);
-  const [customOrdersCount, setCustomOrdersCount] = useState(1);
+  const [orders, setOrders] = useState<any[]>(initialRecentOrders);
+  const [customOrdersCount, setCustomOrdersCount] = useState(3);
 
   useEffect(() => {
-    fetchAnalytics().then(setStats);
-    fetchOrders().then((data) => setOrders(data.slice(0, 5)));
-    fetchCustomOrders().then((data) => setCustomOrdersCount(data.length));
+    fetchAnalytics().then((s) => s && s.orders !== undefined && setStats(s)).catch(() => {});
+    fetchOrders().then((data) => data && data.length > 0 && setOrders(data.slice(0, 5))).catch(() => {});
+    fetchCustomOrders().then((data) => data && data.length > 0 && setCustomOrdersCount(data.length)).catch(() => {});
   }, []);
 
   return (

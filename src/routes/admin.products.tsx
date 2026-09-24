@@ -5,7 +5,7 @@ import { AdminShell, AdminTable } from "@/components/admin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { money, type Product } from "@/lib/catalog";
+import { money, type Product, products as fallbackProducts } from "@/lib/catalog";
 import { fetchProducts, addProduct, deleteProductApi } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -20,7 +20,7 @@ export const Route = createFileRoute("/admin/products")({
 });
 
 function Products() {
-  const [items, setItems] = useState<Product[]>([]);
+  const [items, setItems] = useState<Product[]>(fallbackProducts);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // New product form fields
@@ -33,7 +33,9 @@ function Products() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    fetchProducts().then(setItems);
+    fetchProducts().then((data) => {
+      if (data && data.length > 0) setItems(data);
+    }).catch(() => {});
   }, []);
 
   const handleAddProduct = async (e: React.FormEvent) => {

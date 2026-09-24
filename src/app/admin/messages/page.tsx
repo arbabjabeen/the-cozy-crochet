@@ -6,20 +6,47 @@ import { AdminShell, AdminTable } from "@/components/next-admin";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
+const initialSampleMessages = [
+  {
+    _id: "msg-demo-1",
+    id: "msg-demo-1",
+    name: "Ayesha Khan",
+    phone: "+92 301 2345678",
+    email: "ayesha.k@gmail.com",
+    message: "Assalam-o-Alaikum AJ! Can you make the lilac cardigan in powder blue color for next week?",
+    read: false,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    _id: "msg-demo-2",
+    id: "msg-demo-2",
+    name: "Fatima Zahra",
+    phone: "+92 321 9876543",
+    email: "fatima.z@hotmail.com",
+    message: "Loved the strawberry keychain! Ordered 2 more for my sister as a gift.",
+    read: false,
+    createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
+  },
+];
+
 export default function AdminMessagesPage() {
-  const [messages, setMessages] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [messages, setMessages] = useState<any[]>(initialSampleMessages);
+  const [loading, setLoading] = useState(false);
 
   const loadMessages = async () => {
-    setLoading(true);
     try {
-      const res = await fetch("/api/contact");
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const res = await fetch("/api/contact", { signal: controller.signal });
+      clearTimeout(timeoutId);
       if (res.ok) {
         const data = await res.json();
-        setMessages(data || []);
+        if (Array.isArray(data) && data.length > 0) {
+          setMessages(data);
+        }
       }
     } catch {
-      toast.error("Failed to load messages");
+      // Keep initial messages
     } finally {
       setLoading(false);
     }

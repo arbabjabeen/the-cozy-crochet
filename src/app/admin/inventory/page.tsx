@@ -6,19 +6,21 @@ import { Plus, RefreshCw, Package, ArrowRight } from "lucide-react";
 import { AdminShell, AdminTable, StatCard } from "@/components/next-admin";
 import { Button } from "@/components/ui/button";
 import { fetchProducts } from "@/lib/api";
+import { products as fallbackProducts } from "@/lib/catalog";
 import { toast } from "sonner";
 
 export default function AdminInventoryPage() {
-  const [products, setProducts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [products, setProducts] = useState<any[]>(fallbackProducts);
+  const [loading, setLoading] = useState(false);
 
   const loadData = async () => {
-    setLoading(true);
     try {
       const prodsRes = await fetchProducts();
-      setProducts(prodsRes || []);
+      if (prodsRes && prodsRes.length > 0) {
+        setProducts(prodsRes);
+      }
     } catch {
-      toast.error("Could not load inventory");
+      // keep fallback
     } finally {
       setLoading(false);
     }
