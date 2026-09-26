@@ -60,12 +60,23 @@ export default function CollectionsPage() {
       }
     } catch {}
 
+    const handleVisibility = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        loadProducts();
+      }
+    };
+
     window.addEventListener("cozy_products_updated", handleUpdated);
     window.addEventListener("focus", loadProducts);
+    document.addEventListener("visibilitychange", handleVisibility);
+    const syncInterval = setInterval(loadProducts, 7000);
+
     return () => {
       if (bc) bc.close();
       window.removeEventListener("cozy_products_updated", handleUpdated);
       window.removeEventListener("focus", loadProducts);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      clearInterval(syncInterval);
     };
   }, []);
 

@@ -451,16 +451,18 @@ export function ProductCard({
             loading="lazy"
             className="aspect-[4/5] w-full object-cover transition-transform duration-500 group-hover:scale-[1.025]"
           />
-          {product.badge && (
-            <span className="absolute left-3 top-3 rounded-full bg-card px-3 py-1 text-[11px] font-bold uppercase tracking-wide shadow-xs">
-              {product.badge}
-            </span>
-          )}
-          {isSale && (
-            <span className="absolute right-3 top-3 rounded-full bg-rose-600 text-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wide shadow-md flex items-center gap-1">
-              🔥 {discountPercent ? `-${discountPercent}%` : "SALE"}
-            </span>
-          )}
+          <div className="absolute top-2 left-2 right-2 flex flex-wrap items-start justify-between gap-1 pointer-events-none">
+            {product.badge && product.badge.toLowerCase().trim() !== "sale" && (
+              <span className="rounded-full bg-card/95 backdrop-blur-xs px-2 sm:px-2.5 py-0.5 text-[9px] sm:text-[10px] font-bold uppercase tracking-wide shadow-xs border border-border/60">
+                {product.badge}
+              </span>
+            )}
+            {isSale && (
+              <span className="ml-auto rounded-full bg-rose-600 text-white px-2 sm:px-2.5 py-0.5 text-[9px] sm:text-[10px] font-black uppercase tracking-wide shadow-sm flex items-center gap-1">
+                🔥 {discountPercent ? `-${discountPercent}%` : "SALE"}
+              </span>
+            )}
+          </div>
         </Link>
         <div className="mt-4 flex items-start justify-between gap-3">
           <div>

@@ -63,6 +63,80 @@ export function saveCachedProducts(products: Product[]) {
 const OVERRIDES_KEY = "cozy_studio_product_overrides";
 const LOCAL_PRODS_KEY = "cozy_studio_local_products";
 const DELETED_PRODS_KEY = "cozy_deleted_product_slugs";
+const ORDER_OVERRIDES_KEY = "cozy_studio_order_overrides";
+
+const CLOUD_SYNC_ID = "ff808181a09d98f701a0de0448881e21";
+const CLOUD_SYNC_URL = `https://api.restful-api.dev/objects/${CLOUD_SYNC_ID}`;
+let lastCloudSyncPull = 0;
+
+export async function pushToCloudSync() {
+  if (typeof window === "undefined") return;
+  try {
+    const overrides = JSON.parse(localStorage.getItem(OVERRIDES_KEY) || "{}");
+    const localProducts = JSON.parse(localStorage.getItem(LOCAL_PRODS_KEY) || "[]");
+    const deletedSlugs = JSON.parse(localStorage.getItem(DELETED_PRODS_KEY) || "[]");
+    const orderOverrides = JSON.parse(localStorage.getItem(ORDER_OVERRIDES_KEY) || "{}");
+
+    fetch(CLOUD_SYNC_URL, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "cozy_crochet_sync",
+        data: {
+          updatedAt: Date.now(),
+          overrides,
+          localProducts,
+          deletedSlugs,
+          orderOverrides,
+        },
+      }),
+    }).catch(() => {});
+  } catch {}
+}
+
+export async function pullFromCloudSync() {
+  if (typeof window === "undefined") return null;
+  if (Date.now() - lastCloudSyncPull < 2000) return null;
+  lastCloudSyncPull = Date.now();
+
+  try {
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 2000);
+    const res = await fetch(CLOUD_SYNC_URL, {
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    clearTimeout(tid);
+
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.data && json.data.updatedAt) {
+        const cloud = json.data;
+        if (cloud.overrides) {
+          const localOverrides = JSON.parse(localStorage.getItem(OVERRIDES_KEY) || "{}");
+          localStorage.setItem(OVERRIDES_KEY, JSON.stringify({ ...localOverrides, ...cloud.overrides }));
+        }
+        if (Array.isArray(cloud.localProducts) && cloud.localProducts.length > 0) {
+          const localList: Product[] = JSON.parse(localStorage.getItem(LOCAL_PRODS_KEY) || "[]");
+          const map = new Map<string, Product>();
+          localList.forEach((p) => map.set(p.slug, p));
+          cloud.localProducts.forEach((p: Product) => map.set(p.slug, p));
+          localStorage.setItem(LOCAL_PRODS_KEY, JSON.stringify(Array.from(map.values())));
+        }
+        if (Array.isArray(cloud.deletedSlugs) && cloud.deletedSlugs.length > 0) {
+          const localDel: string[] = JSON.parse(localStorage.getItem(DELETED_PRODS_KEY) || "[]");
+          localStorage.setItem(DELETED_PRODS_KEY, JSON.stringify(Array.from(new Set([...localDel, ...cloud.deletedSlugs]))));
+        }
+        if (cloud.orderOverrides) {
+          const localOrders = JSON.parse(localStorage.getItem(ORDER_OVERRIDES_KEY) || "{}");
+          localStorage.setItem(ORDER_OVERRIDES_KEY, JSON.stringify({ ...localOrders, ...cloud.orderOverrides }));
+        }
+        return cloud;
+      }
+    }
+  } catch {}
+  return null;
+}
 
 export async function fetchProducts(category?: string, search?: string): Promise<Product[]> {
   const hasFilter = Boolean((category && category !== "All") || (search && search.trim()));
@@ -80,6 +154,9 @@ export async function fetchProducts(category?: string, search?: string): Promise
       return matchesCat && matchesSearch;
     });
   };
+
+  // Pull latest updates from cloud sync (e.g. from Laptop to Mobile!)
+  await pullFromCloudSync().catch(() => {});
 
   // Read client-side overrides, locally created items, and deleted slugs
   let deletedSlugs = new Set<string>();
@@ -249,6 +326,7 @@ export async function addProduct(product: Partial<Product>): Promise<Product> {
   saveCachedProducts(updated);
 
   broadcastProductUpdate(finalProduct);
+  pushToCloudSync();
 
   return finalProduct;
 }
@@ -291,6 +369,7 @@ export async function updateProductApi(idOrSlug: string, updates: Partial<Produc
   if (updatedObj) {
     broadcastProductUpdate(updatedObj);
   }
+  pushToCloudSync();
 
   return result || updatedObj || null;
 }
@@ -341,6 +420,8 @@ export async function deleteProductApi(idOrSlug: string): Promise<boolean> {
     } catch {}
   }
 
+  pushToCloudSync();
+
   return true;
 }
 
@@ -375,12 +456,29 @@ export async function placeOrder(order: OrderPayload) {
 }
 
 export async function fetchOrders() {
+  await pullFromCloudSync().catch(() => {});
+  let orderOverrides: Record<string, { status?: string; isPaid?: boolean }> = {};
+  if (typeof window !== "undefined") {
+    try {
+      orderOverrides = JSON.parse(localStorage.getItem(ORDER_OVERRIDES_KEY) || "{}");
+    } catch {}
+  }
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 4000);
     const res = await fetch(`${API_BASE}/orders`, { signal: controller.signal });
     clearTimeout(timeoutId);
-    if (res.ok) return await res.json();
+    if (res.ok) {
+      const orders = await res.json();
+      if (Array.isArray(orders)) {
+        return orders.map((o: any) => {
+          const ov = orderOverrides[o._id || o.orderNumber];
+          return ov ? { ...o, ...ov } : o;
+        });
+      }
+      return orders;
+    }
   } catch {
     // fallback
   }
@@ -392,12 +490,21 @@ export async function updateOrderStatusApi(
   params: string | { status?: string; isPaid?: boolean },
   maybeIsPaid?: boolean
 ) {
-  try {
-    const payload =
-      typeof params === "string"
-        ? { status: params, ...(maybeIsPaid !== undefined ? { isPaid: maybeIsPaid } : {}) }
-        : params;
+  const payload =
+    typeof params === "string"
+      ? { status: params, ...(maybeIsPaid !== undefined ? { isPaid: maybeIsPaid } : {}) }
+      : params;
 
+  if (typeof window !== "undefined") {
+    try {
+      const orderOverrides = JSON.parse(localStorage.getItem(ORDER_OVERRIDES_KEY) || "{}");
+      orderOverrides[id] = payload;
+      localStorage.setItem(ORDER_OVERRIDES_KEY, JSON.stringify(orderOverrides));
+      pushToCloudSync();
+    } catch {}
+  }
+
+  try {
     const res = await fetch(`${API_BASE}/orders/${encodeURIComponent(id)}/status`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },

@@ -59,12 +59,23 @@ export default function HomePage() {
       }
     } catch {}
 
+    const handleVisibility = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        loadProducts();
+      }
+    };
+
     window.addEventListener("cozy_products_updated", handleUpdated);
     window.addEventListener("focus", loadProducts);
+    document.addEventListener("visibilitychange", handleVisibility);
+    const syncInterval = setInterval(loadProducts, 7000);
+
     return () => {
       if (bc) bc.close();
       window.removeEventListener("cozy_products_updated", handleUpdated);
       window.removeEventListener("focus", loadProducts);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      clearInterval(syncInterval);
     };
   }, []);
 
@@ -267,22 +278,27 @@ export default function HomePage() {
       </section>
 
       {/* Customize According to Your Choice Banner */}
-      <section className="mx-auto max-w-7xl px-5 py-12 lg:px-8">
-        <div className="relative overflow-hidden rounded-3xl border border-primary/30 bg-primary/5 p-8 sm:p-12 lg:p-14">
+      <section className="mx-auto max-w-7xl px-4 sm:px-5 py-8 sm:py-12 lg:px-8">
+        <div className="relative overflow-hidden rounded-3xl border border-primary/30 bg-gradient-to-br from-primary/10 via-card to-card p-6 sm:p-10 lg:p-14 shadow-xs">
           <div className="max-w-2xl">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-card px-3.5 py-1 text-xs font-bold uppercase tracking-wider text-accent ring-1 ring-border">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-card px-3 sm:px-3.5 py-1 text-[11px] sm:text-xs font-bold uppercase tracking-wider text-accent ring-1 ring-border shadow-2xs">
               <Sparkles className="size-3.5 text-accent" /> Bespoke Studio Commissions
             </span>
-            <h2 className="mt-4 font-display text-3xl sm:text-4xl font-medium leading-tight">
+            <h2 className="mt-3 sm:mt-4 font-display text-2xl sm:text-3xl lg:text-4xl font-medium leading-snug sm:leading-tight">
               Customize According to Your Choice
             </h2>
-            <p className="mt-3 text-base leading-relaxed text-muted-foreground">
-              Have a special color, dimension, or idea in mind? Share your request and AJ will hand-craft it for you.
+            <p className="mt-2.5 sm:mt-3 text-sm sm:text-base leading-relaxed text-muted-foreground">
+              Have a special color, dimension, or idea in mind? Share your request and AJ will hand-craft it for you with love and care.
             </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Button size="lg" asChild>
+            <div className="mt-5 sm:mt-7 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <Button size="lg" asChild className="h-11 sm:h-12 px-6 font-bold shadow-sm w-full sm:w-auto justify-center text-sm sm:text-base">
                 <Link href="/custom-order">
-                  <Sparkles className="mr-2 size-4" /> Customize a Piece
+                  <Sparkles className="mr-2 size-4 text-accent" /> Customize a Piece <ArrowRight className="ml-2 size-4" />
+                </Link>
+              </Button>
+              <Button size="lg" variant="outline" asChild className="h-11 sm:h-12 px-6 font-semibold bg-card text-foreground hover:bg-secondary w-full sm:w-auto justify-center text-sm sm:text-base">
+                <Link href="/shop">
+                  Browse Shop Pieces
                 </Link>
               </Button>
             </div>

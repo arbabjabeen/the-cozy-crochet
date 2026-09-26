@@ -30,13 +30,46 @@ export default function AdminProductsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  const loadData = () => {
     fetchProducts()
       .then((data) => {
         if (data && data.length > 0) setItems(data);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadData();
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+        bc = new BroadcastChannel("cozy_store_channel");
+        bc.onmessage = () => {
+          loadData();
+        };
+      }
+    } catch {}
+
+    const handleVisibility = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        loadData();
+      }
+    };
+
+    window.addEventListener("cozy_products_updated", loadData);
+    window.addEventListener("focus", loadData);
+    document.addEventListener("visibilitychange", handleVisibility);
+    const syncInterval = setInterval(loadData, 7000);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener("cozy_products_updated", loadData);
+      window.removeEventListener("focus", loadData);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      clearInterval(syncInterval);
+    };
   }, []);
 
   // Get unique categories from items
