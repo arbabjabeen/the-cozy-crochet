@@ -62,7 +62,8 @@ export default function ContactPage() {
         // Persist to localStorage for real-time admin sync
         try {
           const existing = JSON.parse(localStorage.getItem("cozy_studio_messages") || "[]");
-          const newMsg = {
+          const sMsg = data.message;
+          const newMsg = sMsg && (sMsg._id || sMsg.id) ? sMsg : {
             _id: `msg-${Date.now()}`,
             id: `msg-${Date.now()}`,
             name: cleanName,
@@ -72,7 +73,8 @@ export default function ContactPage() {
             createdAt: new Date().toISOString(),
             read: false,
           };
-          const updated = [newMsg, ...existing];
+          const msgKey = newMsg._id || newMsg.id;
+          const updated = [newMsg, ...existing.filter((m: any) => (m._id || m.id) !== msgKey)];
           localStorage.setItem("cozy_studio_messages", JSON.stringify(updated.slice(0, 50)));
         } catch {}
 

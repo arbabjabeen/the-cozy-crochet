@@ -68,108 +68,10 @@ const normalizeStatus = (rawStatus: string): OrderStatus => {
   return "Processing";
 };
 
-const initialUnifiedOrders: UnifiedOrder[] = [
-  {
-    id: "#CC-8805",
-    orderType: "regular",
-    customerName: "ARBAB JABEEN",
-    customerPhone: "03207309867",
-    customerEmail: "arbabjabeen2006@gmail.com",
-    shippingAddress: {
-      fullName: "ARBAB JABEEN",
-      street: "Muhala Ali pur main Street okara",
-      city: "Okara",
-      postalCode: "56300",
-    },
-    itemsSummary: "Crochet Flip Flop Bag Charm (x1), Crochet Tulip Bag Charm (x1)",
-    totalStr: "$15.00",
-    paymentMethod: "WhatsApp / Direct Transfer",
-    isPaid: false,
-    status: "Delivered",
-    createdAt: "2026-09-24T05:39:55.309Z",
-    raw: {
-      orderNumber: "#CC-8805",
-      customer: { name: "ARBAB JABEEN", phone: "03207309867", email: "arbabjabeen2006@gmail.com" },
-      total: 15,
-      isPaid: false,
-      status: "Delivered",
-    },
-  },
-  {
-    id: "#CUST-879",
-    orderType: "custom",
-    customerName: "03207309867",
-    customerPhone: "03207309867",
-    customerEmail: "customer-1790228516424@cozycrochet.com",
-    itemsSummary: "sunflower · yellow (x1)",
-    totalStr: "Custom Quote",
-    paymentMethod: "Custom Commission",
-    isPaid: true,
-    status: "Dispatch",
-    createdAt: "2026-09-24T05:41:56.480Z",
-    raw: {
-      customOrderId: "#CUST-879",
-      customerName: "03207309867",
-      customerPhone: "03207309867",
-      productType: "sunflower",
-      colorPreference: "yellow",
-      isPaid: true,
-      status: "Dispatch",
-    },
-  },
-  {
-    id: "#CC-9954",
-    orderType: "regular",
-    customerName: "ARBAB JABEEN",
-    customerPhone: "03207309867",
-    customerEmail: "arbabjabeen2006@gmail.com",
-    shippingAddress: {
-      fullName: "ARBAB JABEEN",
-      street: "Muhala Ali pur main Street okara",
-      city: "Okara",
-      postalCode: "56300",
-    },
-    itemsSummary: "Crochet Tulip Hair Tie (x2), Crochet Rose Flower Keychain (x1)",
-    totalStr: "$25.00",
-    paymentMethod: "WhatsApp / Direct Transfer",
-    isPaid: false,
-    status: "Processing",
-    createdAt: "2026-09-24T05:37:39.591Z",
-    raw: {
-      orderNumber: "#CC-9954",
-      customer: { name: "ARBAB JABEEN", phone: "03207309867", email: "arbabjabeen2006@gmail.com" },
-      total: 25,
-      isPaid: false,
-      status: "Pending",
-    },
-  },
-  {
-    id: "#CUST-313",
-    orderType: "custom",
-    customerName: "Ayesha Custom",
-    customerPhone: "03009876543",
-    customerEmail: "ayesha@test.com",
-    itemsSummary: "Crochet Plushie & Bag · Lilac and Butter Yellow (x2)",
-    totalStr: "Custom Quote",
-    paymentMethod: "Custom Commission",
-    isPaid: false,
-    status: "Processing",
-    createdAt: "2026-09-24T05:23:08.223Z",
-    raw: {
-      customOrderId: "#CUST-313",
-      customerName: "Ayesha Custom",
-      customerPhone: "03009876543",
-      productType: "Crochet Plushie & Bag",
-      colorPreference: "Lilac and Butter Yellow",
-      isPaid: false,
-      status: "New",
-    },
-  },
-];
 
 export default function AdminOrdersPage() {
-  const [orders, setOrders] = useState<UnifiedOrder[]>(initialUnifiedOrders);
-  const [loading, setLoading] = useState(false);
+  const [orders, setOrders] = useState<UnifiedOrder[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // 1. Order Type: All | Regular | Custom (2 cheezein)
   const [orderTypeFilter, setOrderTypeFilter] = useState<"All" | "Regular" | "Custom">("All");
@@ -368,14 +270,71 @@ export default function AdminOrdersPage() {
       setDetailOrder({ ...detailOrder, status: newStatus });
     }
 
-    // 2. Persist to localStorage
+    // 2. Persist to localStorage across all ID variants (with # and without #)
     try {
       const updates = JSON.parse(localStorage.getItem("cozy_studio_orders_updates") || "{}");
+      const cleanId = order.id.replace(/^#/, "");
+      const hashId = `#${cleanId}`;
+
       updates[order.id] = { ...(updates[order.id] || {}), status: newStatus };
+      updates[cleanId] = { ...(updates[cleanId] || {}), status: newStatus };
+      updates[hashId] = { ...(updates[hashId] || {}), status: newStatus };
+      if (order.raw?._id) {
+        updates[order.raw._id] = { ...(updates[order.raw._id] || {}), status: newStatus };
+      }
+      if (order.raw?.orderNumber) {
+        updates[order.raw.orderNumber] = { ...(updates[order.raw.orderNumber] || {}), status: newStatus };
+      }
+      if (order.raw?.customOrderId) {
+        updates[order.raw.customOrderId] = { ...(updates[order.raw.customOrderId] || {}), status: newStatus };
+      }
       localStorage.setItem("cozy_studio_orders_updates", JSON.stringify(updates));
+
+      // Also update cozy_studio_orders if present
+      const localOrders = JSON.parse(localStorage.getItem("cozy_studio_orders") || "[]");
+      if (Array.isArray(localOrders) && localOrders.length > 0) {
+        const updatedLocal = localOrders.map((lo: any) => {
+          const match =
+            lo.orderNumber === order.id ||
+            lo.orderNumber === cleanId ||
+            lo.orderNumber === hashId ||
+            lo._id === order.id ||
+            lo.id === order.id;
+          return match ? { ...lo, status: newStatus } : lo;
+        });
+        localStorage.setItem("cozy_studio_orders", JSON.stringify(updatedLocal));
+      }
+
+      // Also update cozy_studio_custom_orders if present
+      const localCustom = JSON.parse(localStorage.getItem("cozy_studio_custom_orders") || "[]");
+      if (Array.isArray(localCustom) && localCustom.length > 0) {
+        const updatedCustom = localCustom.map((co: any) => {
+          const match =
+            co.customOrderId === order.id ||
+            co.customOrderId === cleanId ||
+            co.customOrderId === hashId ||
+            co._id === order.id ||
+            co.id === order.id;
+          return match ? { ...co, status: newStatus } : co;
+        });
+        localStorage.setItem("cozy_studio_custom_orders", JSON.stringify(updatedCustom));
+      }
     } catch {}
 
-    // 3. Fire server update in background
+    // 3. Dispatch real-time event so sidebar badge decreases instantly when Delivered!
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("cozy_orders_updated", {
+          detail: {
+            id: order.id,
+            status: newStatus,
+            rawId: order.raw?._id || order.raw?.orderNumber || order.raw?.customOrderId,
+          },
+        })
+      );
+    }
+
+    // 4. Fire server update in background
     if (order.orderType === "custom") {
       updateCustomOrderStatusApi(order.id, { status: newStatus }).catch(() => {});
     } else {

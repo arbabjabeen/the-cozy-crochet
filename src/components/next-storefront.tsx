@@ -424,6 +424,17 @@ export function ProductCard({
   };
 
   const imageSrc = typeof product.image === "string" ? product.image : (product.image as any)?.src || "/assets/cloud-throw.jpg";
+  const isSale = Boolean(
+    product.onSale || (product.originalPrice && product.originalPrice > product.price)
+  );
+  const effectiveOriginal =
+    product.originalPrice && product.originalPrice > product.price
+      ? product.originalPrice
+      : Math.round(product.price * 1.25);
+
+  const discountPercent = isSale
+    ? Math.round(((effectiveOriginal - product.price) / effectiveOriginal) * 100)
+    : null;
 
   return (
     <article className="group min-w-0 flex flex-col justify-between">
@@ -443,6 +454,11 @@ export function ProductCard({
           {product.badge && (
             <span className="absolute left-3 top-3 rounded-full bg-card px-3 py-1 text-[11px] font-bold uppercase tracking-wide shadow-xs">
               {product.badge}
+            </span>
+          )}
+          {isSale && (
+            <span className="absolute right-3 top-3 rounded-full bg-rose-600 text-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wide shadow-md flex items-center gap-1">
+              🔥 {discountPercent ? `-${discountPercent}%` : "SALE"}
             </span>
           )}
         </Link>
@@ -467,7 +483,20 @@ export function ProductCard({
               {product.name}
             </Link>
           </div>
-          <p className="font-semibold text-primary shrink-0 text-sm sm:text-base">{money(product.price)}</p>
+          <div className="text-right shrink-0">
+            {isSale ? (
+              <div className="flex flex-col items-end">
+                <span className="font-bold text-rose-600 dark:text-rose-400 text-sm sm:text-base">
+                  {money(product.price)}
+                </span>
+                <span className="text-[11px] text-muted-foreground line-through">
+                  {money(effectiveOriginal)}
+                </span>
+              </div>
+            ) : (
+              <p className="font-semibold text-primary shrink-0 text-sm sm:text-base">{money(product.price)}</p>
+            )}
+          </div>
         </div>
       </div>
       <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5 sm:gap-2">

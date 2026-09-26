@@ -1,72 +1,128 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { MessageCircle, Trash2, RefreshCw, Phone, Clock, Sparkles } from "lucide-react";
-import { AdminShell, AdminTable } from "@/components/next-admin";
+import { MessageCircle, Trash2, RefreshCw, Phone, Clock } from "lucide-react";
+import { AdminShell } from "@/components/next-admin";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
-const initialSampleMessages = [
-  {
-    _id: "msg-demo-1",
-    id: "msg-demo-1",
-    name: "Ayesha Khan",
-    phone: "+92 301 2345678",
-    email: "ayesha.k@gmail.com",
-    message: "Assalam-o-Alaikum AJ! Can you make the lilac cardigan in powder blue color for next week?",
-    read: false,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    _id: "msg-demo-2",
-    id: "msg-demo-2",
-    name: "Fatima Zahra",
-    phone: "+92 321 9876543",
-    email: "fatima.z@hotmail.com",
-    message: "Loved the strawberry keychain! Ordered 2 more for my sister as a gift.",
-    read: false,
-    createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
-  },
-];
+const DELETED_KEY = "cozy_deleted_message_ids";
+const DELETED_SIGS_KEY = "cozy_deleted_message_sigs";
+
+function getDeletedIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_KEY);
+    const set = new Set<string>(raw ? JSON.parse(raw) : []);
+    set.add("msg-demo-1");
+    set.add("msg-demo-2");
+    set.add("msg-1790263780063");
+    return set;
+  } catch {
+    return new Set<string>(["msg-demo-1", "msg-demo-2", "msg-1790263780063"]);
+  }
+}
+
+function addDeletedId(id: string) {
+  try {
+    const ids = getDeletedIds();
+    ids.add(id);
+    localStorage.setItem(DELETED_KEY, JSON.stringify(Array.from(ids)));
+  } catch {}
+}
+
+function getDeletedSignatures(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DELETED_SIGS_KEY);
+    const set = new Set<string>(raw ? JSON.parse(raw) : []);
+    set.add("powder blue color");
+    set.add("strawberry keychain");
+    return set;
+  } catch {
+    return new Set<string>(["powder blue color", "strawberry keychain"]);
+  }
+}
+
+function addDeletedSignature(sig: string) {
+  try {
+    const sigs = getDeletedSignatures();
+    sigs.add(sig);
+    localStorage.setItem(DELETED_SIGS_KEY, JSON.stringify(Array.from(sigs)));
+  } catch {}
+}
 
 export default function AdminMessagesPage() {
-  const [messages, setMessages] = useState<any[]>(initialSampleMessages);
-  const [loading, setLoading] = useState(false);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const loadMessages = async () => {
     try {
+      // Always read deleted blacklist first
+      const deletedIds = getDeletedIds();
+      const deletedSigs = getDeletedSignatures();
+
       let localMsgs: any[] = [];
-      if (typeof window !== "undefined") {
+      try {
+        localMsgs = JSON.parse(localStorage.getItem("cozy_studio_messages") || "[]");
+      } catch {}
+
+      // Fetch from server
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      let remoteMsgs: any[] = [];
+      let serverOk = false;
+      try {
+        const res = await fetch("/api/contact", { signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          serverOk = true;
+          const data = await res.json();
+          if (Array.isArray(data)) remoteMsgs = data;
+        }
+      } catch {
+        clearTimeout(timeoutId);
+      }
+
+      // If server responded successfully, sync localStorage to prevent stale ghosts
+      if (serverOk) {
         try {
-          localMsgs = JSON.parse(localStorage.getItem("cozy_studio_messages") || "[]");
+          const sanitizedRemote = remoteMsgs.filter((m) => {
+            const key = m._id || m.id;
+            if (!key || deletedIds.has(key)) return false;
+            if (key.startsWith("msg-demo") || key === "msg-1790263780063") return false;
+            for (const sig of deletedSigs) {
+              if (m.message && m.message.includes(sig)) return false;
+            }
+            return true;
+          });
+          localStorage.setItem("cozy_studio_messages", JSON.stringify(sanitizedRemote));
         } catch {}
       }
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
-      const res = await fetch("/api/contact", { signal: controller.signal });
-      clearTimeout(timeoutId);
-      
-      let remoteMsgs: any[] = [];
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data)) remoteMsgs = data;
-      }
-
-      const merged = [...localMsgs, ...remoteMsgs];
-      const seen = new Set();
+      // Merge + deduplicate + filter deleted + purge demo messages
+      const merged = serverOk ? remoteMsgs : [...localMsgs, ...remoteMsgs];
+      const seen = new Set<string>();
       const unique = merged.filter((m) => {
         const key = m._id || m.id;
-        if (!key || seen.has(key)) return false;
+        if (!key || seen.has(key) || deletedIds.has(key)) return false;
+        if (
+          key.startsWith("msg-demo") ||
+          key === "msg-1790263780063" ||
+          (m.id && (m.id.startsWith("msg-demo") || m.id === "msg-1790263780063")) ||
+          (m._id && (m._id.startsWith("msg-demo") || m._id === "msg-1790263780063"))
+        ) {
+          return false;
+        }
+        for (const sig of deletedSigs) {
+          if (m.message && m.message.includes(sig)) return false;
+        }
         seen.add(key);
         return true;
       });
 
-      const finalMsgs = unique.length > 0 ? unique : initialSampleMessages;
-      finalMsgs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setMessages(finalMsgs);
+      unique.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setMessages(unique);
     } catch {
-      // Keep existing messages on error
+      // keep existing
     } finally {
       setLoading(false);
     }
@@ -76,36 +132,91 @@ export default function AdminMessagesPage() {
     loadMessages();
     const handleFocus = () => loadMessages();
     window.addEventListener("focus", handleFocus);
+    window.addEventListener("cozy_messages_updated", loadMessages);
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && !document.hidden) {
         loadMessages();
       }
-    }, 15000);
+    }, 20000);
     return () => {
       clearInterval(interval);
       window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("cozy_messages_updated", loadMessages);
     };
   }, []);
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this message?")) return;
-    
-    // Instant optimistic removal (0ms)
-    setMessages((prev) => prev.filter((m) => (m._id || m.id) !== id));
+    const target = messages.find(
+      (m) => (m._id || m.id) === id || m.id === id || m._id === id
+    );
 
-    // Remove from localStorage
+    // 1. Add to permanent blacklist immediately
+    addDeletedId(id);
+    if (target?._id) addDeletedId(target._id);
+    if (target?.id) addDeletedId(target.id);
+    if (target?.message) {
+      addDeletedSignature(target.message.trim());
+      addDeletedSignature(`${target.name || ""}::${target.message.trim()}`);
+    }
+
+    // 2. Instant optimistic removal from UI
+    setMessages((prev) =>
+      prev.filter((m) => {
+        const mId = m._id || m.id;
+        if (mId === id || m.id === id || m._id === id) return false;
+        if (target && target.message && m.message === target.message && m.name === target.name) return false;
+        return true;
+      })
+    );
+
+    // 3. Remove from localStorage messages cache
     try {
       const local = JSON.parse(localStorage.getItem("cozy_studio_messages") || "[]");
-      const updated = local.filter((m: any) => (m._id || m.id) !== id);
+      const updated = local.filter((m: any) => {
+        const mId = m._id || m.id;
+        if (mId === id || m.id === id || m._id === id) return false;
+        if (target && target.message && m.message === target.message && m.name === target.name) return false;
+        return true;
+      });
       localStorage.setItem("cozy_studio_messages", JSON.stringify(updated));
     } catch {}
 
-    // Send API delete in background
+    // 4. Notify sidebar badge to update instantly
     try {
-      fetch(`/api/contact?id=${id}`, { method: "DELETE" }).catch(() => {});
+      window.dispatchEvent(
+        new CustomEvent("cozy_messages_updated", {
+          detail: { id, targetName: target?.name, targetMessage: target?.message },
+        })
+      );
     } catch {}
 
-    toast.success("Message deleted");
+    // 5. Fire API delete in background
+    fetch(`/api/contact?id=${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
+
+    toast.success("Message deleted successfully");
+  };
+
+  const handleClearAll = async () => {
+    // Blacklist all current messages
+    messages.forEach((m) => {
+      const msgId = m._id || m.id;
+      if (msgId) addDeletedId(msgId);
+      if (m.message) addDeletedSignature(m.message.trim());
+    });
+
+    // Instant optimistic state clearing
+    setMessages([]);
+
+    try {
+      localStorage.setItem("cozy_studio_messages", "[]");
+    } catch {}
+
+    try {
+      window.dispatchEvent(new CustomEvent("cozy_messages_updated", { detail: { clearAll: true } }));
+    } catch {}
+
+    fetch("/api/contact", { method: "DELETE" }).catch(() => {});
+    toast.success("All messages cleared successfully");
   };
 
   const getCleanPhone = (phoneStr: string) => {
@@ -124,15 +235,22 @@ export default function AdminMessagesPage() {
       title="Messages"
       description="Direct inquiries sent by customers from your website contact form."
       actions={
-        <Button variant="outline" size="sm" onClick={loadMessages}>
-          <RefreshCw className="mr-1.5 size-4" /> Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          {messages.length > 0 && (
+            <Button variant="outline" size="sm" onClick={handleClearAll}>
+              <Trash2 className="mr-1.5 size-4 text-destructive" /> Clear All Messages
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={() => { setLoading(true); loadMessages(); }}>
+            <RefreshCw className="mr-1.5 size-4" /> Refresh
+          </Button>
+        </div>
       }
     >
       {loading ? (
         <div className="py-20 flex flex-col items-center justify-center gap-3 text-center">
-          <div className="size-8 animate-spin rounded-full border-3 border-primary border-t-transparent" />
-          <p className="text-sm font-medium tracking-wide text-muted-foreground animate-pulse">Loading...</p>
+          <div className="size-8 animate-spin rounded-full border-[3px] border-primary border-t-transparent" />
+          <p className="text-sm font-medium tracking-wide text-muted-foreground animate-pulse">Loading messages...</p>
         </div>
       ) : messages.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border p-12 text-center">
@@ -146,6 +264,7 @@ export default function AdminMessagesPage() {
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {messages.map((m) => {
+              const msgId = m._id || m.id;
               const cleanPhone = getCleanPhone(m.phone || m.email);
               const waLink = cleanPhone
                 ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(
@@ -155,7 +274,7 @@ export default function AdminMessagesPage() {
 
               return (
                 <div
-                  key={m._id}
+                  key={msgId}
                   className="rounded-2xl border border-border bg-card p-5 shadow-xs flex flex-col justify-between"
                 >
                   <div className="space-y-3">
@@ -194,7 +313,7 @@ export default function AdminMessagesPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleDelete(m._id)}
+                      onClick={() => handleDelete(msgId)}
                       className="text-destructive hover:bg-destructive/10 h-8 px-2"
                     >
                       <Trash2 className="size-3.5" />

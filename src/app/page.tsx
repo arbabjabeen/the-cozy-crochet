@@ -5,14 +5,20 @@ import { ArrowRight, Gift, Heart, Leaf, Sparkles, Package } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { ProductGrid, SectionHeading, StoreShell } from "@/components/next-storefront";
-import { fetchProducts } from "@/lib/api";
+import { fetchProducts, getCachedProducts } from "@/lib/api";
 import { products as initialProducts, type Product } from "@/lib/catalog";
 
 export default function HomePage() {
-  const [featuredProducts, setFeaturedProducts] = useState<Product[]>(initialProducts);
-  const [loading, setLoading] = useState(initialProducts.length === 0);
+  const [featuredProducts, setFeaturedProducts] = useState<Product[]>(() => {
+    if (typeof window !== "undefined") {
+      const cached = getCachedProducts();
+      if (cached && cached.length > 0) return cached;
+    }
+    return initialProducts;
+  });
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  const loadProducts = () => {
     fetchProducts().then((prods) => {
       if (prods && prods.length > 0) {
         setFeaturedProducts(prods);
@@ -21,6 +27,45 @@ export default function HomePage() {
     }).catch(() => {
       setLoading(false);
     });
+  };
+
+  useEffect(() => {
+    loadProducts();
+    const handleUpdated = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail && detail.slug) {
+        if (detail.deleted) {
+          setFeaturedProducts((prev) => prev.filter((p) => p.slug !== detail.slug));
+        } else {
+          setFeaturedProducts((prev) => [detail, ...prev.filter((p) => p.slug !== detail.slug)]);
+        }
+      }
+      loadProducts();
+    };
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+        bc = new BroadcastChannel("cozy_store_channel");
+        bc.onmessage = (event) => {
+          if (event.data?.type === "PRODUCT_UPDATED" && event.data?.product) {
+            const p = event.data.product;
+            setFeaturedProducts((prev) => [p, ...prev.filter((it) => it.slug !== p.slug)]);
+          } else if (event.data?.type === "PRODUCT_DELETED" && event.data?.slug) {
+            setFeaturedProducts((prev) => prev.filter((it) => it.slug !== event.data.slug));
+          }
+          loadProducts();
+        };
+      }
+    } catch {}
+
+    window.addEventListener("cozy_products_updated", handleUpdated);
+    window.addEventListener("focus", loadProducts);
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener("cozy_products_updated", handleUpdated);
+      window.removeEventListener("focus", loadProducts);
+    };
   }, []);
 
   // Build categories using the FIRST item ever added to each category
@@ -59,15 +104,32 @@ export default function HomePage() {
   });
 
   const categories = Array.from(productCategoriesMap.values());
+  const saleProducts = featuredProducts.filter(
+    (p) => Boolean(p.onSale || (p.originalPrice && p.originalPrice > p.price))
+  );
 
   return (
     <StoreShell>
       {/* Hero Section */}
       <section className="mx-auto grid max-w-7xl items-start gap-6 sm:gap-8 px-4 sm:px-5 pb-8 sm:pb-10 pt-3 sm:pt-4 md:grid-cols-[1.1fr_1fr] md:gap-12 md:pt-6 lg:px-8 lg:pt-8">
         <div className="rise pt-1 md:pt-2">
-          <p className="inline-flex items-center gap-1.5 rounded-full bg-card px-3 sm:px-3.5 py-1 text-[11px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-[0.16em] text-primary ring-1 ring-border shadow-2xs">
-            <Sparkles className="size-3 text-primary" /> Handmade in small batches by AJ
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="inline-flex items-center gap-1.5 rounded-full bg-card px-3 sm:px-3.5 py-1 text-[11px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-[0.16em] text-primary ring-1 ring-border shadow-2xs">
+              <Sparkles className="size-3 text-primary" /> Handmade in small batches by AJ
+            </p>
+            {saleProducts.length > 0 && (
+              <Link
+                href="/shop?category=Sale"
+                className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/10 px-3 sm:px-3.5 py-1 text-[11px] sm:text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 ring-1 ring-rose-500/30 shadow-2xs hover:bg-rose-500/20 transition-all duration-200"
+              >
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                </span>
+                🔥 Studio Sale Active ({saleProducts.length} {saleProducts.length === 1 ? "Piece" : "Pieces"}) →
+              </Link>
+            )}
+          </div>
           <h1 className="mt-3 sm:mt-5 max-w-xl font-display text-3xl sm:text-5xl lg:text-6xl font-medium leading-[1.1] sm:leading-[1.08] tracking-tight">
             Woven by hand, made to last.
           </h1>
@@ -104,24 +166,76 @@ export default function HomePage() {
         <section className="mx-auto max-w-7xl px-4 sm:px-5 py-10 sm:py-14 lg:px-8">
           <SectionHeading title="Shop by category" link="Browse all" to="/collections" />
           <div className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 md:grid-cols-4">
-            {categories.map((cat) => (
+            {categories.map((cat) => {
+              const catSaleCount = featuredProducts.filter(
+                (p) =>
+                  p.category?.toLowerCase() === cat.name.toLowerCase() &&
+                  Boolean(p.onSale || (p.originalPrice && p.originalPrice > p.price))
+              ).length;
+
+              return (
+                <Link
+                  key={cat.name}
+                  href={`/shop?category=${encodeURIComponent(cat.name)}`}
+                  className="group rounded-2xl bg-card p-3 ring-1 ring-border transition-all hover:shadow-md"
+                >
+                  <div className="relative overflow-hidden rounded-xl">
+                    <img
+                      src={cat.img}
+                      alt={`${cat.name} collection`}
+                      width={912}
+                      height={912}
+                      loading="lazy"
+                      className="aspect-square w-full rounded-xl object-cover transition-transform group-hover:scale-[1.02]"
+                    />
+                    {catSaleCount > 0 && (
+                      <span className="absolute top-2 right-2 rounded-full bg-rose-600 text-white font-bold text-[10px] px-2 py-0.5 shadow-md flex items-center gap-1">
+                        🔥 {catSaleCount} Sale
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-3 font-bold flex items-center justify-between">
+                    <span>{cat.name}</span>
+                    {catSaleCount > 0 && (
+                      <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400">Sale</span>
+                    )}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{cat.subtitle}</p>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Studio Sale & Limited Offers Section */}
+      {saleProducts.length > 0 && (
+        <section className="mx-auto max-w-7xl px-4 sm:px-5 py-8 sm:py-12 lg:px-8">
+          <div className="rounded-3xl border border-rose-500/25 bg-gradient-to-br from-rose-500/[0.06] via-card to-card p-6 sm:p-8 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6 border-b border-border/60 pb-5">
+              <div>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 ring-1 ring-rose-500/30">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                  </span>
+                  🔥 Studio Special Offers
+                </span>
+                <h2 className="mt-3 font-display text-2xl sm:text-3xl font-medium tracking-tight">
+                  Studio Sale & Limited Releases
+                </h2>
+                <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+                  Special promotional pricing on selected hand-stitched pieces. Grab yours while current studio stock lasts.
+                </p>
+              </div>
               <Link
-                key={cat.name}
-                href={`/shop?category=${encodeURIComponent(cat.name)}`}
-                className="group rounded-2xl bg-card p-3 ring-1 ring-border transition-all hover:shadow-md"
+                href="/shop?category=Sale"
+                className="text-xs sm:text-sm font-bold text-rose-600 hover:text-rose-700 dark:text-rose-400 flex items-center gap-1 shrink-0"
               >
-                <img
-                  src={cat.img}
-                  alt={`${cat.name} collection`}
-                  width={912}
-                  height={912}
-                  loading="lazy"
-                  className="aspect-square w-full rounded-xl object-cover transition-transform group-hover:scale-[1.02]"
-                />
-                <p className="mt-3 font-bold">{cat.name}</p>
-                <p className="text-xs text-muted-foreground">{cat.subtitle}</p>
+                View all {saleProducts.length} sale pieces <ArrowRight className="size-4" />
               </Link>
-            ))}
+            </div>
+            <ProductGrid items={saleProducts} />
           </div>
         </section>
       )}

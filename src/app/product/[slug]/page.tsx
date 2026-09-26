@@ -193,6 +193,18 @@ export default function ProductDetailPage() {
       ? product.image
       : (product.image as any)?.src || "/assets/cloud-throw.jpg";
 
+  const isSale = Boolean(
+    product.onSale || (product.originalPrice && product.originalPrice > product.price)
+  );
+  const effectiveOriginal =
+    product.originalPrice && product.originalPrice > product.price
+      ? product.originalPrice
+      : Math.round(product.price * 1.25);
+
+  const discountPercent = isSale
+    ? Math.round(((effectiveOriginal - product.price) / effectiveOriginal) * 100)
+    : null;
+
   return (
     <StoreShell>
       {/* Product Hero Section */}
@@ -208,6 +220,11 @@ export default function ProductDetailPage() {
           {product.badge && (
             <span className="absolute left-3.5 top-3.5 rounded-full bg-card/90 backdrop-blur-sm px-3 py-1 text-[11px] sm:text-xs font-bold uppercase tracking-wider shadow-xs border border-border">
               {product.badge}
+            </span>
+          )}
+          {isSale && (
+            <span className="absolute right-3.5 top-3.5 rounded-full bg-rose-600 text-white px-3 py-1 text-[11px] sm:text-xs font-black uppercase tracking-wider shadow-md flex items-center gap-1">
+              🔥 {discountPercent ? `-${discountPercent}% SALE` : "SALE"}
             </span>
           )}
         </div>
@@ -227,7 +244,21 @@ export default function ProductDetailPage() {
 
             {/* Price & Rating Badge Bar */}
             <div className="mt-3 sm:mt-4 flex flex-wrap items-center gap-3 sm:gap-4">
-              <p className="font-display text-2xl sm:text-3xl text-primary font-medium">{money(product.price)}</p>
+              <div className="flex items-baseline gap-2.5">
+                <p className={`font-display text-2xl sm:text-3xl font-medium ${isSale ? "text-rose-600 dark:text-rose-400 font-bold" : "text-primary"}`}>
+                  {money(product.price)}
+                </p>
+                {isSale && (
+                  <>
+                    <span className="text-base sm:text-lg text-muted-foreground line-through">
+                      {money(effectiveOriginal)}
+                    </span>
+                    <span className="rounded-full bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 text-xs font-bold px-2.5 py-0.5 border border-rose-200 dark:border-rose-800">
+                      Save {money(effectiveOriginal - product.price)}
+                    </span>
+                  </>
+                )}
+              </div>
 
               {/* Clickable star summary */}
               <button

@@ -15,19 +15,31 @@ export default function AdminCustomersPage() {
   const loadCustomerData = async () => {
     setLoading(true);
     try {
+      // Read deleted customers blacklist
+      let deletedEmails = new Set<string>();
+      try {
+        const raw = localStorage.getItem("cozy_deleted_customers");
+        if (raw) deletedEmails = new Set(JSON.parse(raw).map((e: string) => e.toLowerCase()));
+      } catch {}
+
       const [orders, customOrders, subsRes] = await Promise.all([
         fetchOrders(),
         fetchCustomOrders(),
         fetch("/api/newsletter").then((r) => (r.ok ? r.json() : [])).catch(() => []),
       ]);
 
-      setSubscribers(subsRes || []);
+      const subsList = (subsRes || []).filter(
+        (s: any) => !deletedEmails.has((s.email || "").toLowerCase())
+      );
+      setSubscribers(subsList);
 
       const customerMap = new Map<string, any>();
 
       // From standard store orders
       orders.forEach((o: any) => {
-        const email = o.customer?.email || "customer@example.com";
+        const email = (o.customer?.email || "customer@example.com").toLowerCase().trim();
+        if (deletedEmails.has(email)) return;
+
         const name = o.customer?.name || "Shopper";
         const phone = o.customer?.phone || "N/A";
         const total = o.total || 0;
@@ -51,7 +63,9 @@ export default function AdminCustomersPage() {
 
       // From custom orders
       customOrders.forEach((co: any) => {
-        const email = co.customerEmail;
+        const email = (co.customerEmail || "").toLowerCase().trim();
+        if (!email || deletedEmails.has(email)) return;
+
         const name = co.customerName;
         const phone = co.customerPhone;
 
@@ -83,6 +97,55 @@ export default function AdminCustomersPage() {
   useEffect(() => {
     loadCustomerData();
   }, []);
+
+  const handleDeleteCustomer = async (email: string, name: string) => {
+    // 1. Optimistic removal (0ms)
+    setCustomers((prev) => prev.filter((c) => c.email.toLowerCase() !== email.toLowerCase()));
+
+    // 2. Add to local blacklist
+    try {
+      const raw = localStorage.getItem("cozy_deleted_customers");
+      const list: string[] = raw ? JSON.parse(raw) : [];
+      if (!list.includes(email.toLowerCase())) {
+        list.push(email.toLowerCase());
+        localStorage.setItem("cozy_deleted_customers", JSON.stringify(list));
+      }
+    } catch {}
+
+    // 3. Call server deletion API
+    try {
+      const res = await fetch(`/api/admin/customers?email=${encodeURIComponent(email)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        toast.success(`Removed customer "${name}"`);
+      } else {
+        toast.info(`Removed customer "${name}" from view`);
+      }
+    } catch {
+      toast.info(`Removed customer "${name}" from view`);
+    }
+  };
+
+  const handleDeleteSubscriber = async (email: string) => {
+    setSubscribers((prev) => prev.filter((s) => s.email.toLowerCase() !== email.toLowerCase()));
+
+    try {
+      const raw = localStorage.getItem("cozy_deleted_customers");
+      const list: string[] = raw ? JSON.parse(raw) : [];
+      if (!list.includes(email.toLowerCase())) {
+        list.push(email.toLowerCase());
+        localStorage.setItem("cozy_deleted_customers", JSON.stringify(list));
+      }
+    } catch {}
+
+    try {
+      await fetch(`/api/newsletter?email=${encodeURIComponent(email)}`, { method: "DELETE" });
+      toast.success(`Removed subscriber ${email}`);
+    } catch {
+      toast.info(`Removed subscriber ${email}`);
+    }
+  };
 
   const handleClearDemoData = async () => {
     if (!confirm("Are you sure you want to clear sample demo customers? Only real incoming orders will be kept.")) return;
@@ -127,7 +190,7 @@ export default function AdminCustomersPage() {
         </div>
       ) : (
         <AdminTable
-          headers={["Customer", "Email", "Phone", "Orders", "Type", "Last Activity"]}
+          headers={["Customer", "Email", "Phone", "Orders", "Type", "Last Activity", "Actions"]}
           rows={customers.map((c) => [
             <div className="flex items-center gap-3" key={c.email}>
               <span className="grid size-9 place-items-center rounded-full bg-secondary font-bold text-primary text-xs">
@@ -150,6 +213,16 @@ export default function AdminCustomersPage() {
               {c.type}
             </span>,
             c.lastOrder,
+            <Button
+              key={`del-${c.email}`}
+              variant="ghost"
+              size="sm"
+              onClick={() => handleDeleteCustomer(c.email, c.name)}
+              className="text-destructive hover:bg-destructive/10 h-8 px-2"
+              title="Remove customer"
+            >
+              <Trash2 className="size-4" />
+            </Button>,
           ])}
         />
       )}
@@ -177,7 +250,7 @@ export default function AdminCustomersPage() {
             {subscribers.map((s: any, idx: number) => (
               <div key={idx} className="flex items-center justify-between py-3 text-sm">
                 <span className="font-medium text-foreground">{s.email}</span>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">
                     {s.date ? new Date(s.date).toLocaleDateString() : "Recent"}
                   </span>
@@ -191,6 +264,15 @@ export default function AdminCustomersPage() {
                     }}
                   >
                     Copy Email
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-xs h-7 px-2 text-destructive hover:bg-destructive/10"
+                    onClick={() => handleDeleteSubscriber(s.email)}
+                    title="Remove subscriber"
+                  >
+                    <Trash2 className="size-3.5" />
                   </Button>
                 </div>
               </div>

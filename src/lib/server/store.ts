@@ -17,6 +17,8 @@ export type ProductItem = {
   name: string;
   category: string;
   price: number;
+  originalPrice?: number;
+  onSale?: boolean;
   image: string;
   badge?: string;
   description: string;

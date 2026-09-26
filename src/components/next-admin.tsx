@@ -260,6 +260,20 @@ export function AdminShell({
         const remoteM = Array.isArray(msgRes) ? msgRes : [];
         const pList = Array.isArray(prodsRes) ? prodsRes : [];
 
+        // Read status updates from localStorage for real-time status reflection
+        let statusUpdates: Record<string, { status?: string; isPaid?: boolean }> = {};
+        let deletedMsgIds: string[] = [];
+        let deletedSigs: string[] = [];
+        if (typeof window !== "undefined") {
+          try {
+            statusUpdates = JSON.parse(localStorage.getItem("cozy_studio_orders_updates") || "{}");
+            deletedMsgIds = JSON.parse(localStorage.getItem("cozy_deleted_message_ids") || "[]");
+            deletedSigs = JSON.parse(localStorage.getItem("cozy_deleted_message_sigs") || "[]");
+          } catch {}
+        }
+        const deletedMsgSet = new Set(deletedMsgIds);
+        const deletedSigList = ["powder blue color", "strawberry keychain", ...deletedSigs];
+
         // Deduplicate orders
         const oMap = new Map();
         [...localOrders, ...remoteO].forEach((o) => {
@@ -276,47 +290,207 @@ export function AdminShell({
         });
         const cList = Array.from(cMap.values());
 
-        // Deduplicate messages
+        // Deduplicate messages & filter out deleted messages permanently
         const mMap = new Map();
         [...localMsgs, ...remoteM].forEach((m) => {
           const k = m._id || m.id;
-          if (k && !mMap.has(k)) mMap.set(k, m);
+          if (
+            k &&
+            !mMap.has(k) &&
+            !deletedMsgSet.has(k) &&
+            !k.startsWith("msg-demo") &&
+            k !== "msg-1790263780063" &&
+            !m.id?.startsWith("msg-demo") &&
+            m.id !== "msg-1790263780063" &&
+            !m._id?.startsWith("msg-demo") &&
+            m._id !== "msg-1790263780063"
+          ) {
+            let isDeletedBySig = false;
+            for (const sig of deletedSigList) {
+              if (m.message && m.message.includes(sig)) {
+                isDeletedBySig = true;
+                break;
+              }
+            }
+            if (!isDeletedBySig) {
+              mMap.set(k, m);
+            }
+          }
         });
         const mList = Array.from(mMap.values());
+
+        // Active orders helper: Delivered & Cancelled orders do NOT count towards pending notification badge
+        const isOrderActive = (status: string) => {
+          const s = (status || "").toLowerCase().trim();
+          return !s.includes("deliver") && !s.includes("cancel") && s !== "completed" && s !== "declined";
+        };
+
+        const getResolvedStatus = (o: any) => {
+          const id1 = o.orderNumber;
+          const id2 = o.orderNumber ? o.orderNumber.replace(/^#/, "") : "";
+          const id3 = id2 ? `#${id2}` : "";
+          const id4 = o._id;
+          const id5 = o.id;
+
+          const st =
+            (id1 && statusUpdates[id1]?.status) ||
+            (id2 && statusUpdates[id2]?.status) ||
+            (id3 && statusUpdates[id3]?.status) ||
+            (id4 && statusUpdates[id4]?.status) ||
+            (id5 && statusUpdates[id5]?.status) ||
+            o.status ||
+            "Processing";
+          return st;
+        };
+
+        const activeOrders = oList.filter((o) => isOrderActive(getResolvedStatus(o)));
+
+        const activeCustom = cList.filter((c) => {
+          const id = c.customOrderId || c.id || c._id;
+          const status = statusUpdates[id]?.status || c.status || "New";
+          return isOrderActive(status);
+        });
 
         setOrdersList(oList);
         setCustomList(cList);
         setMessagesList(mList);
         setProductsList(pList);
 
+        // Orders section badge counts ALL pending orders in the orders section (regular + custom)
+        const totalPendingOrders = activeOrders.length + activeCustom.length;
+
         setCounts({
-          orders: oList.length,
-          customOrders: cList.length,
+          orders: totalPendingOrders,
+          customOrders: activeCustom.length,
           messages: mList.length,
         });
 
-        const total = oList.length + cList.length + mList.length;
-        if (total > 0 && typeof document !== "undefined") {
-          document.title = `(${total}) The Cozy Crochet — Studio Admin`;
+        const total = totalPendingOrders + mList.length;
+        if (typeof document !== "undefined") {
+          document.title = total > 0
+            ? `(${total}) The Cozy Crochet — Studio Admin`
+            : `The Cozy Crochet — Studio Admin`;
         }
       } catch {}
     };
 
     fetchCounts();
     const handleFocus = () => fetchCounts();
+
+    let ordersDebounceTimer: any = null;
+
+    const handleOrdersUpdated = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail && detail.id && detail.status) {
+        const id = detail.id;
+        const cleanId = id.replace(/^#/, "");
+        const hashId = `#${cleanId}`;
+        const newStatus = detail.status;
+        const rawId = detail.rawId;
+
+        const isOrderActive = (status: string) => {
+          const s = (status || "").toLowerCase().trim();
+          return !s.includes("deliver") && !s.includes("cancel") && s !== "completed" && s !== "declined";
+        };
+
+        // Instant 0ms optimistic notification badge decrement
+        setOrdersList((prev) => {
+          const nextO = prev.map((o) => {
+            const matches =
+              o.orderNumber === id ||
+              o.orderNumber === cleanId ||
+              o.orderNumber === hashId ||
+              o._id === id ||
+              o.id === id ||
+              (rawId && (o._id === rawId || o.orderNumber === rawId));
+            return matches ? { ...o, status: newStatus } : o;
+          });
+
+          setCustomList((prevC) => {
+            const nextC = prevC.map((c) => {
+              const matches =
+                c.customOrderId === id ||
+                c.customOrderId === cleanId ||
+                c.customOrderId === hashId ||
+                c._id === id ||
+                c.id === id ||
+                (rawId && (c._id === rawId || c.customOrderId === rawId));
+              return matches ? { ...c, status: newStatus } : c;
+            });
+
+            const activeO = nextO.filter((o) => isOrderActive(o.status));
+            const activeC = nextC.filter((c) => isOrderActive(c.status));
+            const totalPending = activeO.length + activeC.length;
+
+            setCounts((c) => ({
+              ...c,
+              orders: totalPending,
+              customOrders: activeC.length,
+            }));
+
+            if (typeof document !== "undefined") {
+              const total = totalPending + counts.messages;
+              document.title = total > 0
+                ? `(${total}) The Cozy Crochet — Studio Admin`
+                : `The Cozy Crochet — Studio Admin`;
+            }
+
+            return nextC;
+          });
+
+          return nextO;
+        });
+      }
+
+      // Debounce server refetch by 1500ms so background PUT finishes writing first
+      if (ordersDebounceTimer) clearTimeout(ordersDebounceTimer);
+      ordersDebounceTimer = setTimeout(() => {
+        fetchCounts();
+      }, 1500);
+    };
+
+    const handleMessagesUpdated = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail?.clearAll) {
+        setMessagesList([]);
+        setCounts((c) => ({ ...c, messages: 0 }));
+      } else if (detail && (detail.id || detail.targetMessage)) {
+        const id = detail.id;
+        const tMsg = detail.targetMessage;
+        const tName = detail.targetName;
+        setMessagesList((prev) => {
+          const next = prev.filter((m) => {
+            const mId = m._id || m.id;
+            if (id && (mId === id || m.id === id || m._id === id)) return false;
+            if (tMsg && m.message === tMsg && (!tName || m.name === tName)) return false;
+            return true;
+          });
+          setCounts((c) => ({ ...c, messages: next.length }));
+          return next;
+        });
+      }
+      setTimeout(() => fetchCounts(), 1200);
+    };
+
     window.addEventListener("focus", handleFocus);
+    window.addEventListener("cozy_orders_updated", handleOrdersUpdated);
+    window.addEventListener("cozy_messages_updated", handleMessagesUpdated);
+
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && !document.hidden) {
         fetchCounts();
       }
-    }, 25000);
+    }, 20000);
     return () => {
       clearInterval(interval);
+      if (ordersDebounceTimer) clearTimeout(ordersDebounceTimer);
       window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("cozy_orders_updated", handleOrdersUpdated);
+      window.removeEventListener("cozy_messages_updated", handleMessagesUpdated);
     };
   }, []);
 
-  const totalNotifications = counts.orders + counts.customOrders + counts.messages;
+  const totalNotifications = counts.orders + counts.messages;
 
   // Search filtering across orders, products, custom requests, and messages
   const q = searchQuery.toLowerCase().trim();
@@ -420,7 +594,7 @@ export function AdminShell({
               href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
 
             let count = 0;
-            if (label === "Orders") count = counts.orders + counts.customOrders;
+            if (label === "Orders") count = counts.orders;
             if (label === "Messages") count = counts.messages;
 
             return (

@@ -34,3 +34,5 @@ out
 *.njsproj
 *.sln
 *.sw?
+cozy_crochet_runtime.json
+tsconfig.tsbuildinfo

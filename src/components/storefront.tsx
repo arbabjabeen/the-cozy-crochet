@@ -229,6 +229,18 @@ export function ProductCard({
     }
   };
 
+  const isSale = Boolean(
+    product.onSale || (product.originalPrice && product.originalPrice > product.price)
+  );
+  const effectiveOriginal =
+    product.originalPrice && product.originalPrice > product.price
+      ? product.originalPrice
+      : Math.round(product.price * 1.25);
+
+  const discountPercent = isSale
+    ? Math.round(((effectiveOriginal - product.price) / effectiveOriginal) * 100)
+    : null;
+
   return (
     <article className="group min-w-0 flex flex-col justify-between">
       <div>
@@ -250,6 +262,11 @@ export function ProductCard({
               {product.badge}
             </span>
           )}
+          {isSale && (
+            <span className="absolute right-3 top-3 rounded-full bg-rose-600 text-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wide shadow-md flex items-center gap-1">
+              🔥 {discountPercent ? `-${discountPercent}%` : "SALE"}
+            </span>
+          )}
         </Link>
         <div className="mt-4 flex items-start justify-between gap-3">
           <div>
@@ -262,7 +279,20 @@ export function ProductCard({
               {product.name}
             </Link>
           </div>
-          <p className="font-semibold text-primary">{money(product.price)}</p>
+          <div className="text-right shrink-0">
+            {isSale ? (
+              <div className="flex flex-col items-end">
+                <span className="font-bold text-rose-600 dark:text-rose-400">
+                  {money(product.price)}
+                </span>
+                <span className="text-[11px] text-muted-foreground line-through">
+                  {money(effectiveOriginal)}
+                </span>
+              </div>
+            ) : (
+              <p className="font-semibold text-primary">{money(product.price)}</p>
+            )}
+          </div>
         </div>
       </div>
       <Button variant="soft" className="mt-3 w-full" onClick={handleAdd}>

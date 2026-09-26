@@ -21,6 +21,8 @@ export default function AdminProductsPage() {
   const [isCustomCategory, setIsCustomCategory] = useState(false);
   const [customCategory, setCustomCategory] = useState("");
   const [price, setPrice] = useState("");
+  const [originalPrice, setOriginalPrice] = useState("");
+  const [isOnSale, setIsOnSale] = useState(false);
   const [stock, setStock] = useState("1");
   const [badge, setBadge] = useState("");
   const [description, setDescription] = useState("");
@@ -46,6 +48,8 @@ export default function AdminProductsPage() {
     setEditingProduct(null);
     setName("");
     setPrice("");
+    setOriginalPrice("");
+    setIsOnSale(false);
     setStock("1");
     setBadge("");
     setDescription("");
@@ -60,6 +64,8 @@ export default function AdminProductsPage() {
     setEditingProduct(p);
     setName(p.name);
     setPrice(String(p.price));
+    setOriginalPrice(p.originalPrice ? String(p.originalPrice) : "");
+    setIsOnSale(Boolean(p.onSale || (p.originalPrice && p.originalPrice > p.price)));
     setStock(String(p.stock !== undefined ? p.stock : 1));
     setBadge(p.badge || "");
     setDescription(p.description || "");
@@ -78,32 +84,62 @@ export default function AdminProductsPage() {
 
   const compressImage = (file: File): Promise<string> => {
     return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement("canvas");
-          let width = img.width;
-          let height = img.height;
-          const maxDim = 1000;
-          if (width > maxDim || height > maxDim) {
-            if (width > height) {
-              height = Math.round((height * maxDim) / width);
-              width = maxDim;
-            } else {
-              width = Math.round((width * maxDim) / height);
-              height = maxDim;
-            }
+      try {
+        const reader = new FileReader();
+        const fallbackTimer = setTimeout(() => {
+          resolve("/assets/cloud-throw.jpg");
+        }, 5000);
+
+        reader.onload = (e) => {
+          const resultStr = e.target?.result as string;
+          if (!resultStr) {
+            clearTimeout(fallbackTimer);
+            return resolve("/assets/cloud-throw.jpg");
           }
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext("2d");
-          ctx?.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL("image/jpeg", 0.82));
+          const img = new Image();
+          img.onload = () => {
+            clearTimeout(fallbackTimer);
+            try {
+              const canvas = document.createElement("canvas");
+              let width = img.width || 400;
+              let height = img.height || 400;
+              const maxDim = 500;
+              if (width > maxDim || height > maxDim) {
+                if (width > height) {
+                  height = Math.round((height * maxDim) / width);
+                  width = maxDim;
+                } else {
+                  width = Math.round((width * maxDim) / height);
+                  height = maxDim;
+                }
+              }
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext("2d");
+              if (ctx) {
+                ctx.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL("image/jpeg", 0.72));
+              } else {
+                resolve(resultStr);
+              }
+            } catch {
+              resolve(resultStr);
+            }
+          };
+          img.onerror = () => {
+            clearTimeout(fallbackTimer);
+            resolve(resultStr);
+          };
+          img.src = resultStr;
         };
-        img.src = e.target?.result as string;
-      };
-      reader.readAsDataURL(file);
+        reader.onerror = () => {
+          clearTimeout(fallbackTimer);
+          resolve("/assets/cloud-throw.jpg");
+        };
+        reader.readAsDataURL(file);
+      } catch {
+        resolve("/assets/cloud-throw.jpg");
+      }
     });
   };
 
@@ -127,7 +163,8 @@ export default function AdminProductsPage() {
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !price) {
+    const effectivePrice = price || (isOnSale && originalPrice ? originalPrice : "");
+    if (!name.trim() || !effectivePrice) {
       toast.error("Please enter product name and price");
       return;
     }
@@ -139,6 +176,12 @@ export default function AdminProductsPage() {
     }
 
     setSubmitting(true);
+    const numPrice = parseFloat(effectivePrice) || 10;
+    let numOriginal = originalPrice ? parseFloat(originalPrice) : undefined;
+    if (isOnSale && (!numOriginal || numOriginal <= numPrice)) {
+      numOriginal = Math.round(numPrice * 1.25);
+    }
+
     try {
       if (editingProduct) {
         // EDIT EXISTING PRODUCT - Instant 0ms optimistic update
@@ -146,7 +189,9 @@ export default function AdminProductsPage() {
           ...editingProduct,
           name: name.trim(),
           category: finalCategory,
-          price: parseFloat(price) || editingProduct.price,
+          price: numPrice,
+          originalPrice: isOnSale ? numOriginal : undefined,
+          onSale: isOnSale,
           stock: parseInt(stock, 10) || 1,
           badge: badge.trim(),
           description: description.trim() || editingProduct.description,
@@ -154,28 +199,23 @@ export default function AdminProductsPage() {
         };
 
         setItems((prev) => prev.map((it) => (it.slug === editingProduct.slug ? updatedItem : it)));
-        toast.success(`Updated "${name}" successfully!`);
         setIsModalOpen(false);
 
-        // Update local catalog cache
-        try {
-          const cached = JSON.parse(sessionStorage.getItem("cozy_cached_products") || "[]");
-          const next = cached.map((it: any) => (it.slug === editingProduct.slug ? updatedItem : it));
-          sessionStorage.setItem("cozy_cached_products", JSON.stringify(next));
-        } catch {}
-
-        // Send API update in background
-        updateProductApi(editingProduct.slug, {
+        // Send API update
+        await updateProductApi(editingProduct.slug, {
           name: name.trim(),
           category: finalCategory,
-          price: parseFloat(price),
+          price: numPrice,
+          originalPrice: isOnSale ? numOriginal : undefined,
+          onSale: isOnSale,
           stock: parseInt(stock, 10) || 1,
           badge: badge.trim(),
           description: description.trim(),
           image: image || (typeof editingProduct.image === "string" ? editingProduct.image : ""),
-        }).catch(() => {});
+        });
+        toast.success(`Updated "${name}" successfully!`);
       } else {
-        // ADD NEW PRODUCT - Instant 0ms optimistic addition
+        // ADD NEW PRODUCT - Instant optimistic addition + await server save
         const slug =
           (name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "crochet-piece") +
           "-" +
@@ -185,7 +225,9 @@ export default function AdminProductsPage() {
           slug,
           name: name.trim(),
           category: finalCategory,
-          price: parseFloat(price) || 10,
+          price: numPrice,
+          originalPrice: isOnSale && numOriginal ? numOriginal : undefined,
+          onSale: isOnSale,
           stock: parseInt(stock, 10) || 1,
           badge: badge.trim(),
           description: description.trim() || "Hand-crocheted slow made piece.",
@@ -195,26 +237,28 @@ export default function AdminProductsPage() {
         };
 
         setItems((prev) => [newProd, ...prev]);
-        toast.success(`"${newProd.name}" added to catalog!`);
         setIsModalOpen(false);
 
-        // Update local catalog cache
-        try {
-          const cached = JSON.parse(sessionStorage.getItem("cozy_cached_products") || "[]");
-          sessionStorage.setItem("cozy_cached_products", JSON.stringify([newProd, ...cached]));
-        } catch {}
-
-        // Send API addition in background
-        addProduct({
+        // Send API addition
+        const saved = await addProduct({
           slug: newProd.slug,
           name: newProd.name,
           category: newProd.category,
           price: newProd.price,
+          originalPrice: newProd.originalPrice,
+          onSale: newProd.onSale,
           stock: newProd.stock,
           badge: newProd.badge,
           description: newProd.description,
           image: newProd.image,
-        }).catch(() => {});
+        });
+
+        // Ensure newly saved product slug/details match
+        if (saved && saved.slug !== newProd.slug) {
+          setItems((prev) => prev.map((p) => (p.slug === newProd.slug ? saved : p)));
+        }
+
+        toast.success(`"${newProd.name}" added to catalog & store!`);
       }
     } catch {
       toast.error("Failed to save product");
@@ -223,17 +267,33 @@ export default function AdminProductsPage() {
     }
   };
 
+  const handleToggleSale = async (p: Product) => {
+    const nextSale = !p.onSale;
+    let nextOriginal = p.originalPrice;
+    if (nextSale && (!nextOriginal || nextOriginal <= p.price)) {
+      nextOriginal = Math.round(p.price * 1.25);
+    }
+
+    const updatedItem: Product = {
+      ...p,
+      onSale: nextSale,
+      originalPrice: nextSale ? nextOriginal : p.originalPrice,
+    };
+
+    setItems((prev) => prev.map((it) => (it.slug === p.slug ? updatedItem : it)));
+    await updateProductApi(p.slug, {
+      onSale: nextSale,
+      originalPrice: nextSale ? nextOriginal : undefined,
+    });
+    toast.success(nextSale ? `"${p.name}" is now on SALE!` : `Sale turned OFF for "${p.name}"`);
+  };
+
   const handleDelete = async (slug: string) => {
     if (!confirm(`Are you sure you want to delete this piece?`)) return;
     
     // Instant optimistic deletion (0ms)
     setItems((prev) => prev.filter((p) => p.slug !== slug));
-    try {
-      const cached = JSON.parse(sessionStorage.getItem("cozy_cached_products") || "[]");
-      sessionStorage.setItem("cozy_cached_products", JSON.stringify(cached.filter((it: any) => it.slug !== slug)));
-    } catch {}
-
-    deleteProductApi(slug).catch(() => {});
+    await deleteProductApi(slug);
     toast.info("Product removed from catalog");
   };
 
@@ -264,7 +324,7 @@ export default function AdminProductsPage() {
         </div>
       ) : (
         <AdminTable
-          headers={["Product", "Category", "Price", "Stock", "Status", "Actions"]}
+          headers={["Product", "Category", "Price", "Sale Promo", "Stock", "Status", "Actions"]}
           rows={items.map((p) => {
             const imgSrc =
               typeof p.image === "string"
@@ -272,14 +332,22 @@ export default function AdminProductsPage() {
                 : (p.image as any)?.src || "/assets/cloud-throw.jpg";
 
             const rowKey = (p as any)._id || p.slug;
+            const isProductOnSale = Boolean(p.onSale && p.originalPrice && p.originalPrice > p.price);
 
             return [
               <div className="flex items-center gap-3" key={`p-cell-${rowKey}`}>
-                <img
-                  src={imgSrc}
-                  alt={p.name}
-                  className="size-12 rounded-lg object-cover ring-1 ring-border"
-                />
+                <div className="relative">
+                  <img
+                    src={imgSrc}
+                    alt={p.name}
+                    className="size-12 rounded-lg object-cover ring-1 ring-border"
+                  />
+                  {p.onSale && (
+                    <span className="absolute -top-1.5 -right-1.5 rounded-full bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.2 shadow-xs">
+                      SALE
+                    </span>
+                  )}
+                </div>
                 <div>
                   <span className="font-bold block">{p.name}</span>
                   {p.badge && (
@@ -290,7 +358,28 @@ export default function AdminProductsPage() {
                 </div>
               </div>,
               p.category,
-              money(p.price),
+              isProductOnSale ? (
+                <div key={`price-${rowKey}`}>
+                  <span className="font-bold text-rose-600 dark:text-rose-400 block">{money(p.price)}</span>
+                  <span className="text-xs text-muted-foreground line-through block">{money(p.originalPrice!)}</span>
+                </div>
+              ) : (
+                money(p.price)
+              ),
+              <Button
+                key={`sale-btn-${rowKey}`}
+                variant={p.onSale ? "default" : "outline"}
+                size="sm"
+                onClick={() => handleToggleSale(p)}
+                className={`text-xs h-7 px-2.5 font-bold transition-all ${
+                  p.onSale
+                    ? "bg-rose-600 hover:bg-rose-700 text-white shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                title={p.onSale ? "Sale active - Click to disable" : "Click to put product on SALE"}
+              >
+                {p.onSale ? "🔥 ON SALE" : "Off"}
+              </Button>,
               `${p.stock} pieces`,
               <span key={`act-${rowKey}`} className="font-bold text-primary">
                 Active
@@ -430,22 +519,93 @@ export default function AdminProductsPage() {
                 )}
               </div>
 
-              {/* Price, Stock & Badge */}
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="mb-1 block text-xs font-bold uppercase text-muted-foreground">
-                    Price ($) *
+              {/* Promotion / Sale Toggle & Settings */}
+              <div className="rounded-2xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/40 dark:bg-rose-950/20 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2.5 text-sm font-bold text-foreground cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={isOnSale}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setIsOnSale(checked);
+                        if (checked && !originalPrice && price) {
+                          const p = parseFloat(price);
+                          if (p > 0) setOriginalPrice((p * 1.25).toFixed(2));
+                        }
+                      }}
+                      className="size-4 rounded border-border text-rose-600 focus:ring-rose-500 accent-rose-600"
+                    />
+                    <span>🏷️ Put this piece on SALE</span>
                   </label>
-                  <Input
-                    required
-                    type="number"
-                    step="0.01"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                  />
+                  {isOnSale && (
+                    <span className="rounded-full bg-rose-600 text-white text-[10px] font-black px-2.5 py-0.5 uppercase tracking-wide shadow-xs">
+                      SALE ACTIVE
+                    </span>
+                  )}
                 </div>
 
-                <div>
+                {isOnSale && (
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-rose-200/60 dark:border-rose-900/40">
+                    <div>
+                      <label className="mb-1 block text-xs font-bold uppercase text-muted-foreground">
+                        Original / Regular Price ($) *
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="e.g. 50.00"
+                        value={originalPrice}
+                        onChange={(e) => setOriginalPrice(e.target.value)}
+                        className="bg-background"
+                      />
+                      <span className="text-[10px] text-muted-foreground">Crossed-out regular price</span>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs font-bold uppercase text-rose-600 dark:text-rose-400">
+                        Sale Price ($) *
+                      </label>
+                      <Input
+                        required
+                        type="number"
+                        step="0.01"
+                        placeholder="e.g. 35.00"
+                        value={price}
+                        onChange={(e) => setPrice(e.target.value)}
+                        className="border-rose-400 focus:border-rose-600 bg-background"
+                      />
+                      <span className="text-[10px] text-rose-600 dark:text-rose-400 font-medium">Customer pays this amount</span>
+                    </div>
+
+                    {originalPrice && price && parseFloat(originalPrice) > parseFloat(price) && (
+                      <div className="col-span-2 rounded-xl bg-rose-100 dark:bg-rose-900/40 px-3 py-1.5 text-xs font-bold text-rose-800 dark:text-rose-200 flex items-center justify-between">
+                        <span>🔥 {Math.round(((parseFloat(originalPrice) - parseFloat(price)) / parseFloat(originalPrice)) * 100)}% DISCOUNT</span>
+                        <span>Customer saves ${(parseFloat(originalPrice) - parseFloat(price)).toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Price, Stock & Badge */}
+              <div className="grid grid-cols-3 gap-3">
+                {!isOnSale && (
+                  <div>
+                    <label className="mb-1 block text-xs font-bold uppercase text-muted-foreground">
+                      Price ($) *
+                    </label>
+                    <Input
+                      required
+                      type="number"
+                      step="0.01"
+                      value={price}
+                      onChange={(e) => setPrice(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                <div className={isOnSale ? "col-span-2" : ""}>
                   <label className="mb-1 block text-xs font-bold uppercase text-muted-foreground">
                     Stock
                   </label>
@@ -457,7 +617,7 @@ export default function AdminProductsPage() {
                   />
                 </div>
 
-                <div>
+                <div className={isOnSale ? "col-span-1" : ""}>
                   <label className="mb-1 block text-xs font-bold uppercase text-muted-foreground">
                     Badge (Optional)
                   </label>

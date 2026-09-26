@@ -6,56 +6,41 @@ import { useState, useEffect } from "react";
 import { AdminShell, AdminTable, StatCard } from "@/components/next-admin";
 import { fetchAnalytics, fetchOrders, fetchCustomOrders } from "@/lib/api";
 
-const initialRecentOrders = [
-  {
-    orderNumber: "#CC-8805",
-    customer: { name: "ARBAB JABEEN", phone: "03207309867", email: "arbabjabeen2006@gmail.com" },
-    items: [{ name: "Crochet Flip Flop Bag Charm" }, { name: "Crochet Tulip Bag Charm" }],
-    total: 15,
-    isPaid: false,
-    status: "Delivered",
-  },
-  {
-    orderNumber: "#CC-9954",
-    customer: { name: "ARBAB JABEEN", phone: "03207309867", email: "arbabjabeen2006@gmail.com" },
-    items: [{ name: "Crochet Tulip Hair Tie" }, { name: "Crochet Rose Flower Keychain" }],
-    total: 25,
-    isPaid: false,
-    status: "Pending",
-  },
-  {
-    orderNumber: "#CC-10945",
-    customer: { name: "Audit Test Customer" },
-    items: [{ name: "Rose Bouquet Keychain" }],
-    total: 5,
-    isPaid: false,
-    status: "Pending",
-  },
-];
+
+
+const getGreeting = () => {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning, AJ.";
+  if (h < 17) return "Good afternoon, AJ.";
+  return "Good evening, AJ.";
+};
 
 export default function AdminDashboardPage() {
   const [stats, setStats] = useState<any>({
-    revenue: "$45.00",
-    orders: 3,
-    averageOrder: "$15.00",
-    lowStock: 1,
+    revenue: "$0.00",
+    orders: 0,
+    averageOrder: "$0.00",
+    lowStock: 0,
   });
-  const [orders, setOrders] = useState<any[]>(initialRecentOrders);
-  const [customOrdersCount, setCustomOrdersCount] = useState(3);
-  const [loading, setLoading] = useState(false);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [customOrdersCount, setCustomOrdersCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [greeting] = useState(getGreeting);
 
   useEffect(() => {
     let localOrders: any[] = [];
+    let statusUpdates: Record<string, { status?: string; isPaid?: boolean }> = {};
     if (typeof window !== "undefined") {
       try {
         localOrders = JSON.parse(localStorage.getItem("cozy_studio_orders") || "[]");
+        statusUpdates = JSON.parse(localStorage.getItem("cozy_studio_orders_updates") || "{}");
       } catch {}
     }
 
     Promise.all([
       fetchAnalytics().then((s) => {
         if (s && s.orders !== undefined) setStats(s);
-      }),
+      }).catch(() => {}),
       fetchOrders().then((data) => {
         const merged = [...localOrders, ...(data || [])];
         const seen = new Set();
@@ -65,17 +50,24 @@ export default function AdminDashboardPage() {
           seen.add(k);
           return true;
         });
-        if (unique.length > 0) setOrders(unique.slice(0, 5));
-      }),
+        // Apply local status overrides
+        const withOverrides = unique.map((o: any) => {
+          const k = o.orderNumber || o.id || o._id;
+          const override = statusUpdates[k];
+          if (!override) return o;
+          return { ...o, ...(override.status ? { status: override.status } : {}), ...(override.isPaid !== undefined ? { isPaid: override.isPaid } : {}) };
+        });
+        if (withOverrides.length > 0) setOrders(withOverrides.slice(0, 5));
+      }).catch(() => {}),
       fetchCustomOrders().then((data) => {
-        if (data && data.length > 0) setCustomOrdersCount(data.length);
-      }),
-    ]).catch(() => {}).finally(() => setLoading(false));
+        if (data) setCustomOrdersCount(data.length);
+      }).catch(() => {}),
+    ]).finally(() => setLoading(false));
   }, []);
 
   return (
     <AdminShell
-      title="Good morning, AJ."
+      title={greeting}
       description="Here’s what is happening in your crochet studio today."
     >
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">

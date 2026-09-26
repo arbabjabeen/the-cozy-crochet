@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageIntro, ProductGrid, StoreShell } from "@/components/next-storefront";
 import { products as initialProducts, type Product } from "@/lib/catalog";
-import { fetchProducts } from "@/lib/api";
+import { fetchProducts, getCachedProducts } from "@/lib/api";
 
 function ShopContent() {
   const router = useRouter();
@@ -18,10 +18,16 @@ function ShopContent() {
 
   const [cat, setCat] = useState(initialCategory);
   const [search, setSearch] = useState(initialQuery);
-  const [allProducts, setAllProducts] = useState<Product[]>(initialProducts);
-  const [loading, setLoading] = useState(initialProducts.length === 0);
+  const [allProducts, setAllProducts] = useState<Product[]>(() => {
+    if (typeof window !== "undefined") {
+      const cached = getCachedProducts();
+      if (cached && cached.length > 0) return cached;
+    }
+    return initialProducts;
+  });
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  const loadProducts = () => {
     fetchProducts()
       .then((data) => {
         if (data && data.length > 0) {
@@ -32,6 +38,45 @@ function ShopContent() {
       .finally(() => {
         setLoading(false);
       });
+  };
+
+  useEffect(() => {
+    loadProducts();
+    const handleUpdated = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail && detail.slug) {
+        if (detail.deleted) {
+          setAllProducts((prev) => prev.filter((p) => p.slug !== detail.slug));
+        } else {
+          setAllProducts((prev) => [detail, ...prev.filter((p) => p.slug !== detail.slug)]);
+        }
+      }
+      loadProducts();
+    };
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+        bc = new BroadcastChannel("cozy_store_channel");
+        bc.onmessage = (event) => {
+          if (event.data?.type === "PRODUCT_UPDATED" && event.data?.product) {
+            const p = event.data.product;
+            setAllProducts((prev) => [p, ...prev.filter((it) => it.slug !== p.slug)]);
+          } else if (event.data?.type === "PRODUCT_DELETED" && event.data?.slug) {
+            setAllProducts((prev) => prev.filter((it) => it.slug !== event.data.slug));
+          }
+          loadProducts();
+        };
+      }
+    } catch {}
+
+    window.addEventListener("cozy_products_updated", handleUpdated);
+    window.addEventListener("focus", loadProducts);
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener("cozy_products_updated", handleUpdated);
+      window.removeEventListener("focus", loadProducts);
+    };
   }, []);
 
   useEffect(() => {
@@ -42,26 +87,27 @@ function ShopContent() {
   }, [searchParams]);
 
   // Dynamically extract only categories that actually have products in the store!
+  const hasAnySale = allProducts.some((p) => Boolean(p.onSale || (p.originalPrice && p.originalPrice > p.price)));
   const catsMap = new Map<string, string>();
 
   allProducts.forEach((p) => {
     if (p.category) {
       const lower = p.category.toLowerCase().trim();
       const label = p.category.charAt(0).toUpperCase() + p.category.slice(1);
-      if (!catsMap.has(lower)) {
+      if (!catsMap.has(lower) && lower !== "sale") {
         catsMap.set(lower, label);
       }
     }
   });
 
-  const cats = ["All", ...Array.from(catsMap.values())];
+  const cats = ["All", ...(hasAnySale ? ["🔥 Sale"] : []), ...Array.from(catsMap.values())];
 
   const handleCategoryChange = useCallback(
     (newCat: string) => {
       setCat(newCat);
       const params = new URLSearchParams();
       if (newCat && newCat.toLowerCase() !== "all") {
-        params.set("category", newCat);
+        params.set("category", newCat === "🔥 Sale" ? "Sale" : newCat);
       }
       if (search.trim()) {
         params.set("q", search.trim());
@@ -77,7 +123,7 @@ function ShopContent() {
     setSearch(newSearch);
     const params = new URLSearchParams();
     if (cat && cat.toLowerCase() !== "all") {
-      params.set("category", cat);
+      params.set("category", cat === "🔥 Sale" ? "Sale" : cat);
     }
     if (newSearch.trim()) {
       params.set("q", newSearch.trim());
@@ -91,7 +137,14 @@ function ShopContent() {
     const pCatLower = p.category?.toLowerCase().trim() || "";
     const activeCatLower = cat.toLowerCase().trim();
 
-    const matchesCat = activeCatLower === "all" || pCatLower === activeCatLower;
+    let matchesCat = false;
+    if (activeCatLower === "all") {
+      matchesCat = true;
+    } else if (activeCatLower === "sale" || activeCatLower === "🔥 sale") {
+      matchesCat = Boolean(p.onSale || (p.originalPrice && p.originalPrice > p.price));
+    } else {
+      matchesCat = pCatLower === activeCatLower;
+    }
 
     const q = search.toLowerCase().trim();
     const matchesSearch =
@@ -106,6 +159,8 @@ function ShopContent() {
   const activeCategoryLabel =
     cat.toLowerCase() === "all"
       ? "All Categories"
+      : cat.toLowerCase() === "sale" || cat.toLowerCase() === "🔥 sale"
+      ? "🔥 Limited Time Studio Sale"
       : cats.find((c) => c.toLowerCase() === cat.toLowerCase()) || cat;
 
   return (

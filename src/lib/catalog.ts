@@ -11,6 +11,8 @@ export type Product = {
   name: string;
   category: string;
   price: number;
+  originalPrice?: number;
+  onSale?: boolean;
   image: string | any;
   badge?: string;
   description: string;

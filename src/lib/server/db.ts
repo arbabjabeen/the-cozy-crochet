@@ -79,6 +79,10 @@ export async function ensureDbInitialized(): Promise<boolean> {
       // Fast probe: check if products, orders, and messages tables all exist
       const probeRes = await pool.query("SELECT 1 FROM products, orders, messages LIMIT 1").catch(() => null);
       if (probeRes) {
+        await pool.query(`
+          ALTER TABLE products ADD COLUMN IF NOT EXISTS original_price NUMERIC DEFAULT NULL;
+          ALTER TABLE products ADD COLUMN IF NOT EXISTS on_sale BOOLEAN DEFAULT FALSE;
+        `).catch(() => {});
         dbInitialized = true;
         return true;
       }
@@ -95,6 +99,8 @@ export async function ensureDbInitialized(): Promise<boolean> {
           name TEXT NOT NULL,
           category TEXT NOT NULL DEFAULT 'Blankets',
           price NUMERIC NOT NULL DEFAULT 0,
+          original_price NUMERIC DEFAULT NULL,
+          on_sale BOOLEAN DEFAULT FALSE,
           image TEXT NOT NULL DEFAULT '/assets/cloud-throw.jpg',
           badge TEXT DEFAULT '',
           description TEXT DEFAULT 'Hand-crocheted piece.',
@@ -193,6 +199,9 @@ export async function ensureDbInitialized(): Promise<boolean> {
           level TEXT NOT NULL DEFAULT 'Healthy',
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
+
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS original_price NUMERIC DEFAULT NULL;
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS on_sale BOOLEAN DEFAULT FALSE;
       `);
 
       // Ensure Master Admin exists
@@ -372,20 +381,7 @@ export async function ensureDbInitialized(): Promise<boolean> {
           }
         }
 
-        // Seed Messages if table is empty
-        const msgCheck = await pool.query("SELECT COUNT(*) FROM messages").catch(() => ({ rows: [{ count: '0' }] }));
-        const msgCount = parseInt(msgCheck.rows[0]?.count || '0', 10);
-        if (msgCount === 0) {
-          await pool.query(`
-            INSERT INTO messages (id, name, phone, email, message, read, created_at)
-            VALUES 
-              ('msg-demo-1', 'Ayesha Khan', '+92 301 2345678', 'ayesha.k@gmail.com', 'Assalam-o-Alaikum AJ! Can you make the lilac cardigan in powder blue color for next week?', false, NOW() - INTERVAL '2 hours'),
-              ('msg-demo-2', 'Fatima Zahra', '+92 321 9876543', 'fatima.z@hotmail.com', 'Loved the strawberry keychain! Ordered 2 more for my sister as a gift.', false, NOW() - INTERVAL '1 day')
-            ON CONFLICT (id) DO NOTHING;
-          `);
-        }
-
-        console.log("✅ PostgreSQL initial data seeded successfully!");
+        console.log("✅ PostgreSQL tables verified successfully!");
       }
 
       dbInitialized = true;
@@ -411,6 +407,8 @@ function mapProductRow(row: any, reviews: ReviewItem[] = []): ProductItem {
     name: row.name,
     category: row.category,
     price: Number(row.price),
+    originalPrice: row.original_price || row.originalPrice ? Number(row.original_price || row.originalPrice) : undefined,
+    onSale: Boolean(row.on_sale || row.onSale),
     image: row.image,
     badge: row.badge || "",
     description: row.description || "",
@@ -598,6 +596,8 @@ export async function createProduct(data: {
   slug?: string;
   category?: string;
   price: number;
+  originalPrice?: number;
+  onSale?: boolean;
   image?: string;
   description?: string;
   stock?: number;
@@ -635,8 +635,8 @@ export async function createProduct(data: {
 
       const id = `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
       const res = await pool.query(
-        `INSERT INTO products (id, slug, name, category, price, image, badge, description, stock, rating, num_reviews, vendor_id, vendor_name)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        `INSERT INTO products (id, slug, name, category, price, original_price, on_sale, image, badge, description, stock, rating, num_reviews, vendor_id, vendor_name)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          RETURNING *`,
         [
           id,
@@ -644,6 +644,8 @@ export async function createProduct(data: {
           data.name,
           data.category || "Blankets",
           Number(data.price) || 0,
+          data.originalPrice ? Number(data.originalPrice) : null,
+          Boolean(data.onSale),
           data.image || "/assets/cloud-throw.jpg",
           data.badge || "",
           data.description || "Hand-crocheted piece.",
@@ -677,6 +679,8 @@ export async function createProduct(data: {
     slug,
     category: data.category || "Blankets",
     price: Number(data.price) || 0,
+    originalPrice: data.originalPrice ? Number(data.originalPrice) : undefined,
+    onSale: Boolean(data.onSale),
     image: data.image || "/assets/cloud-throw.jpg",
     description: data.description || "Hand-crocheted piece.",
     stock: Number(data.stock) || 10,
@@ -711,6 +715,14 @@ export async function updateProduct(
       const name = updates.name !== undefined ? updates.name : current.name;
       const category = updates.category !== undefined ? updates.category : current.category;
       const price = updates.price !== undefined ? Number(updates.price) : current.price;
+      const originalPrice =
+        updates.originalPrice !== undefined
+          ? updates.originalPrice
+            ? Number(updates.originalPrice)
+            : null
+          : current.original_price;
+      const onSale =
+        updates.onSale !== undefined ? Boolean(updates.onSale) : Boolean(current.on_sale);
       const stock = updates.stock !== undefined ? Math.max(0, Number(updates.stock)) : current.stock;
       const image = updates.image !== undefined ? updates.image : current.image;
       const description = updates.description !== undefined ? updates.description : current.description;
@@ -718,10 +730,10 @@ export async function updateProduct(
 
       const updatedRes = await pool.query(
         `UPDATE products
-         SET name = $1, category = $2, price = $3, stock = $4, image = $5, description = $6, badge = $7
-         WHERE id = $8
+         SET name = $1, category = $2, price = $3, original_price = $4, on_sale = $5, stock = $6, image = $7, description = $8, badge = $9
+         WHERE id = $10
          RETURNING *`,
-        [name, category, price, stock, image, description, badge, current.id]
+        [name, category, price, originalPrice, onSale, stock, image, description, badge, current.id]
       );
 
       const updated = mapProductRow(updatedRes.rows[0]);
@@ -743,6 +755,9 @@ export async function updateProduct(
 
   if (updates.stock !== undefined) product.stock = Math.max(0, Number(updates.stock));
   if (updates.price !== undefined) product.price = Number(updates.price);
+  if (updates.originalPrice !== undefined)
+    product.originalPrice = updates.originalPrice ? Number(updates.originalPrice) : undefined;
+  if (updates.onSale !== undefined) product.onSale = Boolean(updates.onSale);
   if (updates.name !== undefined) product.name = updates.name;
   if (updates.category !== undefined) product.category = updates.category;
   if (updates.image !== undefined) product.image = updates.image;
@@ -1038,14 +1053,17 @@ export async function updateOrderStatus(
   status?: string,
   isPaid?: boolean
 ): Promise<OrderItem | null> {
+  const cleanId = id.replace(/^#/, "");
+  const hashId = `#${cleanId}`;
+
   const isConnected = await ensureDbInitialized();
   const pool = getPool();
 
   if (isConnected && pool) {
     try {
       const existingRes = await pool.query(
-        "SELECT * FROM orders WHERE id = $1 OR order_number = $1 LIMIT 1",
-        [id]
+        "SELECT * FROM orders WHERE id = $1 OR order_number = $1 OR order_number = $2 OR order_number = $3 LIMIT 1",
+        [id, cleanId, hashId]
       );
       if (existingRes.rows.length === 0) return null;
 
@@ -1066,7 +1084,13 @@ export async function updateOrderStatus(
       const updated = mapOrderRow(updatedRes.rows[0]);
       // Sync memory
       const store = getStore();
-      const foundO = store.orders.find((o) => o._id === id || o.orderNumber === id);
+      const foundO = store.orders.find(
+        (o) =>
+          o._id === id ||
+          o.orderNumber === id ||
+          o.orderNumber === cleanId ||
+          o.orderNumber === hashId
+      );
       if (foundO) Object.assign(foundO, updated);
       saveStore();
       return updated;
@@ -1077,7 +1101,13 @@ export async function updateOrderStatus(
 
   // Fallback
   const store = getStore();
-  const order = store.orders.find((o) => o._id === id || o.orderNumber === id);
+  const order = store.orders.find(
+    (o) =>
+      o._id === id ||
+      o.orderNumber === id ||
+      o.orderNumber === cleanId ||
+      o.orderNumber === hashId
+  );
   if (!order) return null;
 
   if (status !== undefined) order.status = status;
@@ -1558,24 +1588,29 @@ export async function getMessages(): Promise<any[]> {
 
   if (isConnected && pool) {
     try {
-      const res = await pool.query("SELECT * FROM messages ORDER BY created_at DESC");
-      return res.rows.map((r) => ({
-        _id: r.id,
-        id: r.id,
-        name: r.name,
-        phone: r.phone || "",
-        email: r.email || "",
-        message: r.message,
-        read: Boolean(r.read),
-        createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
-      }));
+      const res = await pool.query(
+        "SELECT * FROM messages WHERE id NOT LIKE 'msg-demo%' ORDER BY created_at DESC"
+      );
+      return res.rows
+        .map((r) => ({
+          _id: r.id,
+          id: r.id,
+          name: r.name,
+          phone: r.phone || "",
+          email: r.email || "",
+          message: r.message,
+          read: Boolean(r.read),
+          createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
+        }))
+        .filter((m) => !m.id?.startsWith("msg-demo") && !m._id?.startsWith("msg-demo"));
     } catch (err: any) {
       console.warn("DB error in getMessages:", err.message);
     }
   }
 
   const store = getStore() as any;
-  return store.messages || [];
+  const list = store.messages || [];
+  return list.filter((m: any) => !m.id?.startsWith("msg-demo") && !m._id?.startsWith("msg-demo"));
 }
 
 export async function addMessage(data: {
@@ -1662,10 +1697,16 @@ export async function deleteMessages(id?: string): Promise<boolean> {
 
   const store = getStore() as any;
   if (id) {
-    store.messages = (store.messages || []).filter((m: any) => m._id !== id);
+    store.messages = (store.messages || []).filter(
+      (m: any) => m._id !== id && m.id !== id
+    );
   } else {
     store.messages = [];
   }
+  // Permanently purge any demo messages
+  store.messages = (store.messages || []).filter(
+    (m: any) => !m.id?.startsWith("msg-demo") && !m._id?.startsWith("msg-demo")
+  );
   saveStore();
   return true;
 }
@@ -1726,6 +1767,81 @@ export async function addSubscriber(email: string): Promise<{ isNew: boolean }> 
     return { isNew: true };
   }
   return { isNew: false };
+}
+
+export async function deleteSubscriber(email: string): Promise<boolean> {
+  const cleanEmail = email.toLowerCase().trim();
+  if (!cleanEmail) return false;
+
+  const isConnected = await ensureDbInitialized();
+  const pool = getPool();
+
+  if (isConnected && pool) {
+    try {
+      await pool.query("DELETE FROM subscribers WHERE LOWER(email) = $1", [cleanEmail]);
+    } catch (err: any) {
+      console.warn("DB error in deleteSubscriber:", err.message);
+    }
+  }
+
+  const store = getStore();
+  if (store.subscribers) {
+    store.subscribers = store.subscribers.filter((s: any) => s.email.toLowerCase() !== cleanEmail);
+    saveStore();
+  }
+  return true;
+}
+
+export async function deleteCustomerByEmail(email: string): Promise<boolean> {
+  const cleanEmail = email.toLowerCase().trim();
+  if (!cleanEmail) return false;
+
+  // Protect administrative accounts from deletion
+  if (
+    cleanEmail === "arbabjabeen2006@gmail.com" ||
+    cleanEmail === "admin@cozycrochet.com"
+  ) {
+    return false;
+  }
+
+  const isConnected = await ensureDbInitialized();
+  const pool = getPool();
+
+  if (isConnected && pool) {
+    try {
+      await pool.query("DELETE FROM orders WHERE LOWER(customer_email) = $1", [cleanEmail]);
+      await pool.query("DELETE FROM custom_orders WHERE LOWER(customer_email) = $1", [cleanEmail]);
+      await pool.query("DELETE FROM users WHERE LOWER(email) = $1 AND role != 'admin'", [cleanEmail]);
+      await pool.query("DELETE FROM subscribers WHERE LOWER(email) = $1", [cleanEmail]);
+    } catch (err: any) {
+      console.warn("DB error in deleteCustomerByEmail:", err.message);
+    }
+  }
+
+  const store = getStore() as any;
+  if (store.orders) {
+    store.orders = store.orders.filter(
+      (o: any) => (o.customer?.email || "").toLowerCase() !== cleanEmail
+    );
+  }
+  if (store.customOrders) {
+    store.customOrders = store.customOrders.filter(
+      (co: any) => (co.customerEmail || "").toLowerCase() !== cleanEmail
+    );
+  }
+  if (store.users) {
+    store.users = store.users.filter(
+      (u: any) => (u.email || "").toLowerCase() !== cleanEmail || u.role === "admin"
+    );
+  }
+  if (store.subscribers) {
+    store.subscribers = store.subscribers.filter(
+      (s: any) => (s.email || "").toLowerCase() !== cleanEmail
+    );
+  }
+
+  saveStore();
+  return true;
 }
 
 // ============================================================================
