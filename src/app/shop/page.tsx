@@ -100,6 +100,11 @@ function ShopContent() {
     }
   });
 
+  const isSaleCat = (s: string) => {
+    const lower = (s || "").toLowerCase().trim();
+    return lower === "sale" || lower === "🔥 sale";
+  };
+
   const cats = ["All", ...(hasAnySale ? ["🔥 Sale"] : []), ...Array.from(catsMap.values())];
 
   const handleCategoryChange = useCallback(
@@ -107,7 +112,7 @@ function ShopContent() {
       setCat(newCat);
       const params = new URLSearchParams();
       if (newCat && newCat.toLowerCase() !== "all") {
-        params.set("category", newCat === "🔥 Sale" ? "Sale" : newCat);
+        params.set("category", isSaleCat(newCat) ? "Sale" : newCat);
       }
       if (search.trim()) {
         params.set("q", search.trim());
@@ -123,7 +128,7 @@ function ShopContent() {
     setSearch(newSearch);
     const params = new URLSearchParams();
     if (cat && cat.toLowerCase() !== "all") {
-      params.set("category", cat === "🔥 Sale" ? "Sale" : cat);
+      params.set("category", isSaleCat(cat) ? "Sale" : cat);
     }
     if (newSearch.trim()) {
       params.set("q", newSearch.trim());
@@ -140,7 +145,7 @@ function ShopContent() {
     let matchesCat = false;
     if (activeCatLower === "all") {
       matchesCat = true;
-    } else if (activeCatLower === "sale" || activeCatLower === "🔥 sale") {
+    } else if (isSaleCat(activeCatLower)) {
       matchesCat = Boolean(p.onSale || (p.originalPrice && p.originalPrice > p.price));
     } else {
       matchesCat = pCatLower === activeCatLower;
@@ -159,7 +164,7 @@ function ShopContent() {
   const activeCategoryLabel =
     cat.toLowerCase() === "all"
       ? "All Categories"
-      : cat.toLowerCase() === "sale" || cat.toLowerCase() === "🔥 sale"
+      : isSaleCat(cat)
       ? "🔥 Limited Time Studio Sale"
       : cats.find((c) => c.toLowerCase() === cat.toLowerCase()) || cat;
 
@@ -203,10 +208,18 @@ function ShopContent() {
           <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible no-scrollbar pt-1">
             <SlidersHorizontal className="mr-1 size-3.5 text-muted-foreground shrink-0" />
             {cats.map((c) => {
-              const isSelected = cat.toLowerCase().trim() === c.toLowerCase().trim();
+              const isSaleBtn = isSaleCat(c);
+              const isSelected =
+                (isSaleCat(cat) && isSaleBtn) ||
+                cat.toLowerCase().trim() === c.toLowerCase().trim();
+
               const count =
                 c.toLowerCase() === "all"
                   ? allProducts.length
+                  : isSaleBtn
+                  ? allProducts.filter(
+                      (p) => Boolean(p.onSale || (p.originalPrice && p.originalPrice > p.price))
+                    ).length
                   : allProducts.filter(
                       (p) => p.category?.toLowerCase().trim() === c.toLowerCase().trim()
                     ).length;
