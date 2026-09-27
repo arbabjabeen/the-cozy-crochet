@@ -225,11 +225,11 @@ export default function AdminOrdersPage() {
 
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && !document.hidden) {
-        pullFromCloudSync().then((c) => {
+        pullFromCloudSync(true).then((c) => {
           if (c) loadAllOrders();
         });
       }
-    }, 5000);
+    }, 4000);
 
     return () => {
       clearInterval(interval);

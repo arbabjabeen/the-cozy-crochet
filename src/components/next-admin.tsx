@@ -500,11 +500,11 @@ export function AdminShell({
 
     const interval = setInterval(() => {
       if (typeof document !== "undefined" && !document.hidden) {
-        pullFromCloudSync().then((c) => {
+        pullFromCloudSync(true).then(() => {
           fetchCounts();
         });
       }
-    }, 5000);
+    }, 4000);
 
     return () => {
       clearInterval(interval);

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { money, type Product, products as fallbackProducts } from "@/lib/catalog";
-import { fetchProducts, addProduct, updateProductApi, deleteProductApi } from "@/lib/api";
+import { fetchProducts, addProduct, updateProductApi, deleteProductApi, pullFromCloudSync } from "@/lib/api";
 import { toast } from "sonner";
 
 export default function AdminProductsPage() {
@@ -31,7 +31,9 @@ export default function AdminProductsPage() {
   const [loading, setLoading] = useState(false);
 
   const loadData = () => {
-    fetchProducts()
+    pullFromCloudSync(true)
+      .catch(() => {})
+      .then(() => fetchProducts())
       .then((data) => {
         if (data && data.length > 0) setItems(data);
       })
@@ -62,7 +64,11 @@ export default function AdminProductsPage() {
     window.addEventListener("cozy_cloud_synced", loadData);
     window.addEventListener("focus", loadData);
     document.addEventListener("visibilitychange", handleVisibility);
-    const syncInterval = setInterval(loadData, 5000);
+    const syncInterval = setInterval(() => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        loadData();
+      }
+    }, 4000);
 
     return () => {
       if (bc) bc.close();
