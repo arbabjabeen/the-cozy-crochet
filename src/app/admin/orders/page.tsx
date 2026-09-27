@@ -24,6 +24,8 @@ import {
   fetchCustomOrders,
   updateOrderStatusApi,
   updateCustomOrderStatusApi,
+  pullFromCloudSync,
+  pushToCloudSync,
 } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -92,6 +94,9 @@ export default function AdminOrdersPage() {
 
   const loadAllOrders = async () => {
     try {
+      // Pull latest order statuses from Cloud Sync (e.g. from Laptop to Mobile!)
+      await pullFromCloudSync(true).catch(() => {});
+
       // 1. Read locally stored orders & status overrides first (instant 0ms render)
       let localOrders: any[] = [];
       let localCustom: any[] = [];
@@ -130,7 +135,15 @@ export default function AdminOrdersPage() {
 
       const unifiedRegular: UnifiedOrder[] = uniqueRegular.map((o: any) => {
         const id = o.orderNumber || o.id || o._id;
-        const update = statusUpdates[id] || {};
+        const cleanId = String(id).replace(/^#/, "");
+        const hashId = `#${cleanId}`;
+        const update =
+          statusUpdates[id] ||
+          statusUpdates[cleanId] ||
+          statusUpdates[hashId] ||
+          (o._id && statusUpdates[o._id]) ||
+          (o.id && statusUpdates[o.id]) ||
+          {};
         return {
           id,
           orderType: "regular",
@@ -152,7 +165,15 @@ export default function AdminOrdersPage() {
 
       const unifiedCustom: UnifiedOrder[] = uniqueCustom.map((co: any) => {
         const id = co.customOrderId || co.id || co._id;
-        const update = statusUpdates[id] || {};
+        const cleanId = String(id).replace(/^#/, "");
+        const hashId = `#${cleanId}`;
+        const update =
+          statusUpdates[id] ||
+          statusUpdates[cleanId] ||
+          statusUpdates[hashId] ||
+          (co._id && statusUpdates[co._id]) ||
+          (co.id && statusUpdates[co.id]) ||
+          {};
         return {
           id,
           orderType: "custom",
@@ -190,15 +211,32 @@ export default function AdminOrdersPage() {
   useEffect(() => {
     loadAllOrders();
     const handleFocus = () => loadAllOrders();
-    window.addEventListener("focus", handleFocus);
-    const interval = setInterval(() => {
+    const handleVisibility = () => {
       if (typeof document !== "undefined" && !document.hidden) {
         loadAllOrders();
       }
-    }, 15000);
+    };
+    const handleSync = () => loadAllOrders();
+
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("cozy_orders_updated", handleSync);
+    window.addEventListener("cozy_cloud_synced", handleSync);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        pullFromCloudSync().then((c) => {
+          if (c) loadAllOrders();
+        });
+      }
+    }, 5000);
+
     return () => {
       clearInterval(interval);
       window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("cozy_orders_updated", handleSync);
+      window.removeEventListener("cozy_cloud_synced", handleSync);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
 
@@ -243,11 +281,16 @@ export default function AdminOrdersPage() {
       setDetailOrder({ ...detailOrder, isPaid });
     }
 
-    // 2. Persist to localStorage
+    // 2. Persist to localStorage across all ID variants
     try {
       const updates = JSON.parse(localStorage.getItem("cozy_studio_orders_updates") || "{}");
+      const cleanId = order.id.replace(/^#/, "");
+      const hashId = `#${cleanId}`;
       updates[order.id] = { ...(updates[order.id] || {}), isPaid };
+      updates[cleanId] = { ...(updates[cleanId] || {}), isPaid };
+      updates[hashId] = { ...(updates[hashId] || {}), isPaid };
       localStorage.setItem("cozy_studio_orders_updates", JSON.stringify(updates));
+      pushToCloudSync();
     } catch {}
 
     // 3. Fire server update in background
@@ -289,6 +332,7 @@ export default function AdminOrdersPage() {
         updates[order.raw.customOrderId] = { ...(updates[order.raw.customOrderId] || {}), status: newStatus };
       }
       localStorage.setItem("cozy_studio_orders_updates", JSON.stringify(updates));
+      pushToCloudSync();
 
       // Also update cozy_studio_orders if present
       const localOrders = JSON.parse(localStorage.getItem("cozy_studio_orders") || "[]");

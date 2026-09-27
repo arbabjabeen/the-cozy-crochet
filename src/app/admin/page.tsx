@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Clock3, PackageCheck, Sparkles } from "lucide-react";
 import { useState, useEffect } from "react";
 import { AdminShell, AdminTable, StatCard } from "@/components/next-admin";
-import { fetchAnalytics, fetchOrders, fetchCustomOrders } from "@/lib/api";
+import { fetchAnalytics, fetchOrders, fetchCustomOrders, pullFromCloudSync } from "@/lib/api";
 
 
 
@@ -27,7 +27,9 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [greeting] = useState(getGreeting);
 
-  useEffect(() => {
+  const loadData = async () => {
+    await pullFromCloudSync(true).catch(() => {});
+
     let localOrders: any[] = [];
     let statusUpdates: Record<string, { status?: string; isPaid?: boolean }> = {};
     if (typeof window !== "undefined") {
@@ -37,32 +39,85 @@ export default function AdminDashboardPage() {
       } catch {}
     }
 
-    Promise.all([
-      fetchAnalytics().then((s) => {
-        if (s && s.orders !== undefined) setStats(s);
-      }).catch(() => {}),
-      fetchOrders().then((data) => {
-        const merged = [...localOrders, ...(data || [])];
-        const seen = new Set();
-        const unique = merged.filter((o: any) => {
-          const k = o.orderNumber || o.id || o._id;
-          if (!k || seen.has(k)) return false;
-          seen.add(k);
-          return true;
+    try {
+      const [analyticsData, ordersData, customData] = await Promise.all([
+        fetchAnalytics().catch(() => null),
+        fetchOrders().catch(() => []),
+        fetchCustomOrders().catch(() => []),
+      ]);
+
+      if (analyticsData && analyticsData.orders !== undefined) {
+        setStats(analyticsData);
+      }
+
+      const merged = [...localOrders, ...(ordersData || [])];
+      const seen = new Set();
+      const unique = merged.filter((o: any) => {
+        const k = o.orderNumber || o.id || o._id;
+        if (!k || seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+
+      // Apply local status overrides across cleanId, hashId, and raw ID
+      const withOverrides = unique.map((o: any) => {
+        const k = o.orderNumber || o.id || o._id;
+        const cleanId = String(k).replace(/^#/, "");
+        const hashId = `#${cleanId}`;
+        const override =
+          statusUpdates[k] ||
+          statusUpdates[cleanId] ||
+          statusUpdates[hashId] ||
+          (o._id && statusUpdates[o._id]) ||
+          (o.id && statusUpdates[o.id]);
+        if (!override) return o;
+        return {
+          ...o,
+          ...(override.status ? { status: override.status } : {}),
+          ...(override.isPaid !== undefined ? { isPaid: override.isPaid } : {}),
+        };
+      });
+
+      if (withOverrides.length > 0) {
+        setOrders(withOverrides.slice(0, 5));
+      }
+
+      if (customData) {
+        setCustomOrdersCount(customData.length);
+      }
+    } catch {} finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+    const handleFocus = () => loadData();
+    const handleVisibility = () => {
+      if (typeof document !== "undefined" && !document.hidden) loadData();
+    };
+    const handleSync = () => loadData();
+
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("cozy_orders_updated", handleSync);
+    window.addEventListener("cozy_cloud_synced", handleSync);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        pullFromCloudSync().then((c) => {
+          if (c) loadData();
         });
-        // Apply local status overrides
-        const withOverrides = unique.map((o: any) => {
-          const k = o.orderNumber || o.id || o._id;
-          const override = statusUpdates[k];
-          if (!override) return o;
-          return { ...o, ...(override.status ? { status: override.status } : {}), ...(override.isPaid !== undefined ? { isPaid: override.isPaid } : {}) };
-        });
-        if (withOverrides.length > 0) setOrders(withOverrides.slice(0, 5));
-      }).catch(() => {}),
-      fetchCustomOrders().then((data) => {
-        if (data) setCustomOrdersCount(data.length);
-      }).catch(() => {}),
-    ]).finally(() => setLoading(false));
+      }
+    }, 6000);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("cozy_orders_updated", handleSync);
+      window.removeEventListener("cozy_cloud_synced", handleSync);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, []);
 
   return (

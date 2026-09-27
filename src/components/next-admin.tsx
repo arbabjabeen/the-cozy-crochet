@@ -29,6 +29,7 @@ import { useState, useEffect, useRef, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthContext";
+import { pullFromCloudSync } from "@/lib/api";
 
 const links = [
   ["Overview", "/admin", LayoutDashboard],
@@ -232,6 +233,9 @@ export function AdminShell({
   useEffect(() => {
     const fetchCounts = async () => {
       try {
+        // Pull latest updates from cloud sync (e.g. status changes from Laptop to Mobile!)
+        await pullFromCloudSync(true).catch(() => {});
+
         let localOrders: any[] = [];
         let localCustom: any[] = [];
         let localMsgs: any[] = [];
@@ -347,7 +351,16 @@ export function AdminShell({
 
         const activeCustom = cList.filter((c) => {
           const id = c.customOrderId || c.id || c._id;
-          const status = statusUpdates[id]?.status || c.status || "New";
+          const cleanId = String(id).replace(/^#/, "");
+          const hashId = `#${cleanId}`;
+          const status =
+            statusUpdates[id]?.status ||
+            statusUpdates[cleanId]?.status ||
+            statusUpdates[hashId]?.status ||
+            (c._id && statusUpdates[c._id]?.status) ||
+            (c.id && statusUpdates[c.id]?.status) ||
+            c.status ||
+            "New";
           return isOrderActive(status);
         });
 
@@ -472,21 +485,35 @@ export function AdminShell({
       setTimeout(() => fetchCounts(), 1200);
     };
 
-    window.addEventListener("focus", handleFocus);
-    window.addEventListener("cozy_orders_updated", handleOrdersUpdated);
-    window.addEventListener("cozy_messages_updated", handleMessagesUpdated);
-
-    const interval = setInterval(() => {
+    const handleSync = () => fetchCounts();
+    const handleVisibility = () => {
       if (typeof document !== "undefined" && !document.hidden) {
         fetchCounts();
       }
-    }, 20000);
+    };
+
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("cozy_orders_updated", handleOrdersUpdated);
+    window.addEventListener("cozy_messages_updated", handleMessagesUpdated);
+    window.addEventListener("cozy_cloud_synced", handleSync);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        pullFromCloudSync().then((c) => {
+          fetchCounts();
+        });
+      }
+    }, 5000);
+
     return () => {
       clearInterval(interval);
       if (ordersDebounceTimer) clearTimeout(ordersDebounceTimer);
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("cozy_orders_updated", handleOrdersUpdated);
       window.removeEventListener("cozy_messages_updated", handleMessagesUpdated);
+      window.removeEventListener("cozy_cloud_synced", handleSync);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
 

@@ -59,13 +59,15 @@ export default function AdminProductsPage() {
     };
 
     window.addEventListener("cozy_products_updated", loadData);
+    window.addEventListener("cozy_cloud_synced", loadData);
     window.addEventListener("focus", loadData);
     document.addEventListener("visibilitychange", handleVisibility);
-    const syncInterval = setInterval(loadData, 7000);
+    const syncInterval = setInterval(loadData, 5000);
 
     return () => {
       if (bc) bc.close();
       window.removeEventListener("cozy_products_updated", loadData);
+      window.removeEventListener("cozy_cloud_synced", loadData);
       window.removeEventListener("focus", loadData);
       document.removeEventListener("visibilitychange", handleVisibility);
       clearInterval(syncInterval);

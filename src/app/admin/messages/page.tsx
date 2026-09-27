@@ -5,6 +5,7 @@ import { MessageCircle, Trash2, RefreshCw, Phone, Clock } from "lucide-react";
 import { AdminShell } from "@/components/next-admin";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { pullFromCloudSync, pushToCloudSync } from "@/lib/api";
 
 const DELETED_KEY = "cozy_deleted_message_ids";
 const DELETED_SIGS_KEY = "cozy_deleted_message_sigs";
@@ -56,6 +57,9 @@ export default function AdminMessagesPage() {
 
   const loadMessages = async () => {
     try {
+      // Pull latest deleted message blacklist from cloud sync
+      await pullFromCloudSync(true).catch(() => {});
+
       // Always read deleted blacklist first
       const deletedIds = getDeletedIds();
       const deletedSigs = getDeletedSignatures();
@@ -131,17 +135,32 @@ export default function AdminMessagesPage() {
   useEffect(() => {
     loadMessages();
     const handleFocus = () => loadMessages();
-    window.addEventListener("focus", handleFocus);
-    window.addEventListener("cozy_messages_updated", loadMessages);
-    const interval = setInterval(() => {
+    const handleVisibility = () => {
       if (typeof document !== "undefined" && !document.hidden) {
         loadMessages();
       }
-    }, 20000);
+    };
+    const handleSync = () => loadMessages();
+
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("cozy_messages_updated", handleSync);
+    window.addEventListener("cozy_cloud_synced", handleSync);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    const interval = setInterval(() => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        pullFromCloudSync().then((c) => {
+          if (c) loadMessages();
+        });
+      }
+    }, 5000);
+
     return () => {
       clearInterval(interval);
       window.removeEventListener("focus", handleFocus);
-      window.removeEventListener("cozy_messages_updated", loadMessages);
+      window.removeEventListener("cozy_messages_updated", handleSync);
+      window.removeEventListener("cozy_cloud_synced", handleSync);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
 
@@ -181,6 +200,9 @@ export default function AdminMessagesPage() {
       localStorage.setItem("cozy_studio_messages", JSON.stringify(updated));
     } catch {}
 
+    // Push blacklist to cloud sync so other devices instantly remove deleted messages
+    pushToCloudSync();
+
     // 4. Notify sidebar badge to update instantly
     try {
       window.dispatchEvent(
@@ -210,6 +232,8 @@ export default function AdminMessagesPage() {
     try {
       localStorage.setItem("cozy_studio_messages", "[]");
     } catch {}
+
+    pushToCloudSync();
 
     try {
       window.dispatchEvent(new CustomEvent("cozy_messages_updated", { detail: { clearAll: true } }));

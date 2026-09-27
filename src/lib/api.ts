@@ -60,14 +60,18 @@ export function saveCachedProducts(products: Product[]) {
   }
 }
 
-const OVERRIDES_KEY = "cozy_studio_product_overrides";
-const LOCAL_PRODS_KEY = "cozy_studio_local_products";
-const DELETED_PRODS_KEY = "cozy_deleted_product_slugs";
-const ORDER_OVERRIDES_KEY = "cozy_studio_order_overrides";
+export const OVERRIDES_KEY = "cozy_studio_product_overrides";
+export const LOCAL_PRODS_KEY = "cozy_studio_local_products";
+export const DELETED_PRODS_KEY = "cozy_deleted_product_slugs";
+export const ORDER_UPDATES_KEY = "cozy_studio_orders_updates";
+export const ORDER_OVERRIDES_KEY = "cozy_studio_order_overrides";
+export const DELETED_MSG_IDS_KEY = "cozy_deleted_message_ids";
+export const DELETED_MSG_SIGS_KEY = "cozy_deleted_message_sigs";
 
 const CLOUD_SYNC_ID = "ff808181a09d98f701a0de0448881e21";
 const CLOUD_SYNC_URL = `https://api.restful-api.dev/objects/${CLOUD_SYNC_ID}`;
 let lastCloudSyncPull = 0;
+let lastKnownCloudUpdatedAt = 0;
 
 export async function pushToCloudSync() {
   if (typeof window === "undefined") return;
@@ -75,7 +79,11 @@ export async function pushToCloudSync() {
     const overrides = JSON.parse(localStorage.getItem(OVERRIDES_KEY) || "{}");
     const localProducts = JSON.parse(localStorage.getItem(LOCAL_PRODS_KEY) || "[]");
     const deletedSlugs = JSON.parse(localStorage.getItem(DELETED_PRODS_KEY) || "[]");
-    const orderOverrides = JSON.parse(localStorage.getItem(ORDER_OVERRIDES_KEY) || "{}");
+    const orderUpdates1 = JSON.parse(localStorage.getItem(ORDER_UPDATES_KEY) || "{}");
+    const orderUpdates2 = JSON.parse(localStorage.getItem(ORDER_OVERRIDES_KEY) || "{}");
+    const orderUpdates = { ...orderUpdates2, ...orderUpdates1 };
+    const deletedMsgIds = JSON.parse(localStorage.getItem(DELETED_MSG_IDS_KEY) || "[]");
+    const deletedMsgSigs = JSON.parse(localStorage.getItem(DELETED_MSG_SIGS_KEY) || "[]");
 
     fetch(CLOUD_SYNC_URL, {
       method: "PUT",
@@ -87,24 +95,31 @@ export async function pushToCloudSync() {
           overrides,
           localProducts,
           deletedSlugs,
-          orderOverrides,
+          orderUpdates,
+          orderOverrides: orderUpdates,
+          deletedMsgIds,
+          deletedMsgSigs,
         },
       }),
     }).catch(() => {});
   } catch {}
 }
 
-export async function pullFromCloudSync() {
+export async function pullFromCloudSync(force = false) {
   if (typeof window === "undefined") return null;
-  if (Date.now() - lastCloudSyncPull < 2000) return null;
+  if (!force && Date.now() - lastCloudSyncPull < 2000) return null;
   lastCloudSyncPull = Date.now();
 
   try {
     const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), 2000);
+    const tid = setTimeout(() => controller.abort(), 3500);
     const res = await fetch(CLOUD_SYNC_URL, {
       signal: controller.signal,
       cache: "no-store",
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+      },
     });
     clearTimeout(tid);
 
@@ -112,24 +127,49 @@ export async function pullFromCloudSync() {
       const json = await res.json();
       if (json && json.data && json.data.updatedAt) {
         const cloud = json.data;
-        if (cloud.overrides) {
-          const localOverrides = JSON.parse(localStorage.getItem(OVERRIDES_KEY) || "{}");
-          localStorage.setItem(OVERRIDES_KEY, JSON.stringify({ ...localOverrides, ...cloud.overrides }));
-        }
-        if (Array.isArray(cloud.localProducts) && cloud.localProducts.length > 0) {
-          const localList: Product[] = JSON.parse(localStorage.getItem(LOCAL_PRODS_KEY) || "[]");
-          const map = new Map<string, Product>();
-          localList.forEach((p) => map.set(p.slug, p));
-          cloud.localProducts.forEach((p: Product) => map.set(p.slug, p));
-          localStorage.setItem(LOCAL_PRODS_KEY, JSON.stringify(Array.from(map.values())));
-        }
-        if (Array.isArray(cloud.deletedSlugs) && cloud.deletedSlugs.length > 0) {
-          const localDel: string[] = JSON.parse(localStorage.getItem(DELETED_PRODS_KEY) || "[]");
-          localStorage.setItem(DELETED_PRODS_KEY, JSON.stringify(Array.from(new Set([...localDel, ...cloud.deletedSlugs]))));
-        }
-        if (cloud.orderOverrides) {
-          const localOrders = JSON.parse(localStorage.getItem(ORDER_OVERRIDES_KEY) || "{}");
-          localStorage.setItem(ORDER_OVERRIDES_KEY, JSON.stringify({ ...localOrders, ...cloud.orderOverrides }));
+        const isNewer = cloud.updatedAt > lastKnownCloudUpdatedAt;
+        if (isNewer || force) {
+          lastKnownCloudUpdatedAt = cloud.updatedAt;
+
+          if (cloud.overrides) {
+            const localOverrides = JSON.parse(localStorage.getItem(OVERRIDES_KEY) || "{}");
+            localStorage.setItem(OVERRIDES_KEY, JSON.stringify({ ...localOverrides, ...cloud.overrides }));
+          }
+          if (Array.isArray(cloud.localProducts) && cloud.localProducts.length > 0) {
+            const localList: Product[] = JSON.parse(localStorage.getItem(LOCAL_PRODS_KEY) || "[]");
+            const map = new Map<string, Product>();
+            localList.forEach((p) => map.set(p.slug, p));
+            cloud.localProducts.forEach((p: Product) => map.set(p.slug, p));
+            localStorage.setItem(LOCAL_PRODS_KEY, JSON.stringify(Array.from(map.values())));
+          }
+          if (Array.isArray(cloud.deletedSlugs) && cloud.deletedSlugs.length > 0) {
+            const localDel: string[] = JSON.parse(localStorage.getItem(DELETED_PRODS_KEY) || "[]");
+            localStorage.setItem(DELETED_PRODS_KEY, JSON.stringify(Array.from(new Set([...localDel, ...cloud.deletedSlugs]))));
+          }
+
+          const cloudOrders = cloud.orderUpdates || cloud.orderOverrides;
+          if (cloudOrders && Object.keys(cloudOrders).length > 0) {
+            const localOrders = JSON.parse(localStorage.getItem(ORDER_UPDATES_KEY) || "{}");
+            const merged = { ...localOrders, ...cloudOrders };
+            localStorage.setItem(ORDER_UPDATES_KEY, JSON.stringify(merged));
+            localStorage.setItem(ORDER_OVERRIDES_KEY, JSON.stringify(merged));
+          }
+
+          if (Array.isArray(cloud.deletedMsgIds) && cloud.deletedMsgIds.length > 0) {
+            const localMsgIds: string[] = JSON.parse(localStorage.getItem(DELETED_MSG_IDS_KEY) || "[]");
+            localStorage.setItem(DELETED_MSG_IDS_KEY, JSON.stringify(Array.from(new Set([...localMsgIds, ...cloud.deletedMsgIds]))));
+          }
+          if (Array.isArray(cloud.deletedMsgSigs) && cloud.deletedMsgSigs.length > 0) {
+            const localMsgSigs: string[] = JSON.parse(localStorage.getItem(DELETED_MSG_SIGS_KEY) || "[]");
+            localStorage.setItem(DELETED_MSG_SIGS_KEY, JSON.stringify(Array.from(new Set([...localMsgSigs, ...cloud.deletedMsgSigs]))));
+          }
+
+          try {
+            window.dispatchEvent(new CustomEvent("cozy_cloud_synced", { detail: cloud }));
+            window.dispatchEvent(new CustomEvent("cozy_orders_updated", { detail: { sync: true } }));
+            window.dispatchEvent(new CustomEvent("cozy_messages_updated", { detail: { sync: true } }));
+            window.dispatchEvent(new CustomEvent("cozy_products_updated", { detail: { sync: true } }));
+          } catch {}
         }
         return cloud;
       }
@@ -497,10 +537,16 @@ export async function updateOrderStatusApi(
 
   if (typeof window !== "undefined") {
     try {
-      const orderOverrides = JSON.parse(localStorage.getItem(ORDER_OVERRIDES_KEY) || "{}");
-      orderOverrides[id] = payload;
-      localStorage.setItem(ORDER_OVERRIDES_KEY, JSON.stringify(orderOverrides));
+      const cleanId = id.replace(/^#/, "");
+      const hashId = `#${cleanId}`;
+      const updates = JSON.parse(localStorage.getItem(ORDER_UPDATES_KEY) || "{}");
+      updates[id] = { ...(updates[id] || {}), ...payload };
+      updates[cleanId] = { ...(updates[cleanId] || {}), ...payload };
+      updates[hashId] = { ...(updates[hashId] || {}), ...payload };
+      localStorage.setItem(ORDER_UPDATES_KEY, JSON.stringify(updates));
+      localStorage.setItem(ORDER_OVERRIDES_KEY, JSON.stringify(updates));
       pushToCloudSync();
+      window.dispatchEvent(new CustomEvent("cozy_orders_updated", { detail: { id, ...payload } }));
     } catch {}
   }
 
@@ -579,12 +625,27 @@ export async function updateCustomOrderStatusApi(
   params: string | { status?: string; isPaid?: boolean },
   maybeIsPaid?: boolean
 ) {
-  try {
-    const payload =
-      typeof params === "string"
-        ? { status: params, ...(maybeIsPaid !== undefined ? { isPaid: maybeIsPaid } : {}) }
-        : params;
+  const payload =
+    typeof params === "string"
+      ? { status: params, ...(maybeIsPaid !== undefined ? { isPaid: maybeIsPaid } : {}) }
+      : params;
 
+  if (typeof window !== "undefined") {
+    try {
+      const cleanId = id.replace(/^#/, "");
+      const hashId = `#${cleanId}`;
+      const updates = JSON.parse(localStorage.getItem(ORDER_UPDATES_KEY) || "{}");
+      updates[id] = { ...(updates[id] || {}), ...payload };
+      updates[cleanId] = { ...(updates[cleanId] || {}), ...payload };
+      updates[hashId] = { ...(updates[hashId] || {}), ...payload };
+      localStorage.setItem(ORDER_UPDATES_KEY, JSON.stringify(updates));
+      localStorage.setItem(ORDER_OVERRIDES_KEY, JSON.stringify(updates));
+      pushToCloudSync();
+      window.dispatchEvent(new CustomEvent("cozy_orders_updated", { detail: { id, ...payload } }));
+    } catch {}
+  }
+
+  try {
     const res = await fetch(`${API_BASE}/custom-orders/${encodeURIComponent(id)}/status`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
