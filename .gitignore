@@ -35,4 +35,5 @@ out
 *.sln
 *.sw?
 cozy_crochet_runtime.json
+cozy_sync_mirror.json
 tsconfig.tsbuildinfo

@@ -271,7 +271,7 @@ export default function AdminOrdersPage() {
     }
   };
 
-  const handlePaymentChange = (order: UnifiedOrder, isPaid: boolean) => {
+  const handlePaymentChange = async (order: UnifiedOrder, isPaid: boolean) => {
     // 1. Instant 0ms optimistic UI update (zero lag)
     setOrders((prev) =>
       prev.map((o) => (o.id === order.id ? { ...o, isPaid } : o))
@@ -290,7 +290,8 @@ export default function AdminOrdersPage() {
       updates[cleanId] = { ...(updates[cleanId] || {}), isPaid };
       updates[hashId] = { ...(updates[hashId] || {}), isPaid };
       localStorage.setItem("cozy_studio_orders_updates", JSON.stringify(updates));
-      pushToCloudSync();
+      localStorage.setItem("cozy_studio_order_overrides", JSON.stringify(updates));
+      await pushToCloudSync();
     } catch {}
 
     // 3. Fire server update in background
@@ -303,7 +304,7 @@ export default function AdminOrdersPage() {
     toast.success(`Order #${order.id} marked as ${isPaid ? "Paid" : "Unpaid"}`);
   };
 
-  const handleFulfillmentChange = (order: UnifiedOrder, newStatus: OrderStatus) => {
+  const handleFulfillmentChange = async (order: UnifiedOrder, newStatus: OrderStatus) => {
     // 1. Instant 0ms optimistic UI update (zero lag, no freezing)
     setOrders((prev) =>
       prev.map((o) => (o.id === order.id ? { ...o, status: newStatus } : o))
@@ -332,7 +333,8 @@ export default function AdminOrdersPage() {
         updates[order.raw.customOrderId] = { ...(updates[order.raw.customOrderId] || {}), status: newStatus };
       }
       localStorage.setItem("cozy_studio_orders_updates", JSON.stringify(updates));
-      pushToCloudSync();
+      localStorage.setItem("cozy_studio_order_overrides", JSON.stringify(updates));
+      await pushToCloudSync();
 
       // Also update cozy_studio_orders if present
       const localOrders = JSON.parse(localStorage.getItem("cozy_studio_orders") || "[]");

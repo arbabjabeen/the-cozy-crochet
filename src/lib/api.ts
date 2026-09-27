@@ -68,14 +68,12 @@ export const ORDER_OVERRIDES_KEY = "cozy_studio_order_overrides";
 export const DELETED_MSG_IDS_KEY = "cozy_deleted_message_ids";
 export const DELETED_MSG_SIGS_KEY = "cozy_deleted_message_sigs";
 
-const EXTENDSCLASS_BIN = "fdbebfe";
-const PRIMARY_SYNC_URL = `https://extendsclass.com/api/json-storage/bin/${EXTENDSCLASS_BIN}`;
-const BACKUP_SYNC_URL = "/api/cloud-sync";
+const SYNC_URL = "/api/cloud-sync";
 let lastCloudSyncPull = 0;
 let lastKnownCloudUpdatedAt = 0;
 
 export async function pushToCloudSync() {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined") return null;
   try {
     const overrides = JSON.parse(localStorage.getItem(OVERRIDES_KEY) || "{}");
     const localProducts = JSON.parse(localStorage.getItem(LOCAL_PRODS_KEY) || "[]");
@@ -98,125 +96,112 @@ export async function pushToCloudSync() {
       deletedMsgSigs,
     };
 
-    const payloadStr = JSON.stringify(payload);
-
-    // 1. Push to Primary ExtendsClass Cloud Bin (accessible globally across all devices)
-    fetch(PRIMARY_SYNC_URL, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: payloadStr,
-    }).catch(() => {});
-
-    // 2. Push to local Next.js backup mirror
-    fetch(BACKUP_SYNC_URL, {
+    const res = await fetch(SYNC_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: payloadStr,
-    }).catch(() => {});
+      body: JSON.stringify(payload),
+      keepalive: true,
+    });
+    if (res.ok) {
+      return await res.json();
+    }
   } catch {}
+  return null;
 }
 
 export async function pullFromCloudSync(force = false) {
   if (typeof window === "undefined") return null;
-  if (!force && Date.now() - lastCloudSyncPull < 2000) return null;
+  if (!force && Date.now() - lastCloudSyncPull < 1200) return null;
   lastCloudSyncPull = Date.now();
 
   try {
-    let cloud: any = null;
+    const controller = new AbortController();
+    const tid = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(`${SYNC_URL}?_t=${Date.now()}`, {
+      signal: controller.signal,
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+      },
+    });
+    clearTimeout(tid);
 
-    // 1. Try Primary Cloud Bin first
-    try {
-      const controller = new AbortController();
-      const tid = setTimeout(() => controller.abort(), 3500);
-      const res = await fetch(`${PRIMARY_SYNC_URL}?_t=${Date.now()}`, {
-        signal: controller.signal,
-        cache: "no-store",
-        headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-        },
-      });
-      clearTimeout(tid);
-      if (res.ok) {
-        const json = await res.json();
-        cloud =
-          json && json.data && typeof json.data === "object" && json.data.updatedAt
-            ? json.data
-            : json;
+    if (res.ok) {
+      const json = await res.json();
+      const cloud = json && json.data && typeof json.data === "object" ? json.data : json;
+
+      if (cloud && cloud.updatedAt) {
+        const isNewer = cloud.updatedAt > lastKnownCloudUpdatedAt;
+        if (isNewer || force) {
+          lastKnownCloudUpdatedAt = cloud.updatedAt;
+
+          if (cloud.overrides) {
+            const localOverrides = JSON.parse(localStorage.getItem(OVERRIDES_KEY) || "{}");
+            const mergedOverrides = { ...localOverrides };
+            for (const slug of Object.keys(cloud.overrides)) {
+              mergedOverrides[slug] = {
+                ...(mergedOverrides[slug] || {}),
+                ...(cloud.overrides[slug] || {}),
+              };
+            }
+            localStorage.setItem(OVERRIDES_KEY, JSON.stringify(mergedOverrides));
+          }
+          if (Array.isArray(cloud.localProducts) && cloud.localProducts.length > 0) {
+            const localList: Product[] = JSON.parse(localStorage.getItem(LOCAL_PRODS_KEY) || "[]");
+            const map = new Map<string, Product>();
+            localList.forEach((p) => p && p.slug && map.set(p.slug, p));
+            cloud.localProducts.forEach((p: Product) => p && p.slug && map.set(p.slug, p));
+            localStorage.setItem(LOCAL_PRODS_KEY, JSON.stringify(Array.from(map.values())));
+          }
+          if (Array.isArray(cloud.deletedSlugs) && cloud.deletedSlugs.length > 0) {
+            const localDel: string[] = JSON.parse(localStorage.getItem(DELETED_PRODS_KEY) || "[]");
+            localStorage.setItem(DELETED_PRODS_KEY, JSON.stringify(Array.from(new Set([...localDel, ...cloud.deletedSlugs]))));
+          }
+
+          const cloudOrders = cloud.orderUpdates || cloud.orderOverrides;
+          if (cloudOrders && Object.keys(cloudOrders).length > 0) {
+            const localOrders = JSON.parse(localStorage.getItem(ORDER_UPDATES_KEY) || "{}");
+            const merged = { ...localOrders, ...cloudOrders };
+            localStorage.setItem(ORDER_UPDATES_KEY, JSON.stringify(merged));
+            localStorage.setItem(ORDER_OVERRIDES_KEY, JSON.stringify(merged));
+          }
+
+          if (Array.isArray(cloud.deletedMsgIds) && cloud.deletedMsgIds.length > 0) {
+            const localMsgIds: string[] = JSON.parse(localStorage.getItem(DELETED_MSG_IDS_KEY) || "[]");
+            localStorage.setItem(DELETED_MSG_IDS_KEY, JSON.stringify(Array.from(new Set([...localMsgIds, ...cloud.deletedMsgIds]))));
+          }
+          if (Array.isArray(cloud.deletedMsgSigs) && cloud.deletedMsgSigs.length > 0) {
+            const localMsgSigs: string[] = JSON.parse(localStorage.getItem(DELETED_MSG_SIGS_KEY) || "[]");
+            localStorage.setItem(DELETED_MSG_SIGS_KEY, JSON.stringify(Array.from(new Set([...localMsgSigs, ...cloud.deletedMsgSigs]))));
+          }
+
+          // Instantly patch in-memory product cache so UI reflects edits without full reload
+          try {
+            const base = inMemoryProductsCache || fallbackProducts;
+            const currentOverrides = JSON.parse(localStorage.getItem(OVERRIDES_KEY) || "{}");
+            const currentDeleted = new Set(JSON.parse(localStorage.getItem(DELETED_PRODS_KEY) || "[]"));
+            const currentLocal: Product[] = JSON.parse(localStorage.getItem(LOCAL_PRODS_KEY) || "[]");
+
+            const map = new Map<string, Product>();
+            [...currentLocal, ...base].forEach((p) => {
+              if (p && p.slug && !currentDeleted.has(p.slug)) {
+                const ov = currentOverrides[p.slug] || {};
+                map.set(p.slug, { ...p, ...ov });
+              }
+            });
+            saveCachedProducts(Array.from(map.values()));
+          } catch {}
+
+          try {
+            window.dispatchEvent(new CustomEvent("cozy_cloud_synced", { detail: cloud }));
+            window.dispatchEvent(new CustomEvent("cozy_orders_updated", { detail: { sync: true } }));
+            window.dispatchEvent(new CustomEvent("cozy_messages_updated", { detail: { sync: true } }));
+            window.dispatchEvent(new CustomEvent("cozy_products_updated", { detail: { sync: true } }));
+          } catch {}
+        }
+        return cloud;
       }
-    } catch {}
-
-    // 2. Try Backup Mirror if primary failed
-    if (!cloud || !cloud.updatedAt) {
-      try {
-        const controller2 = new AbortController();
-        const tid2 = setTimeout(() => controller2.abort(), 2000);
-        const res2 = await fetch(`${BACKUP_SYNC_URL}?_t=${Date.now()}`, {
-          signal: controller2.signal,
-          cache: "no-store",
-          headers: {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            Pragma: "no-cache",
-          },
-        });
-        clearTimeout(tid2);
-        if (res2.ok) {
-          const json2 = await res2.json();
-          cloud =
-            json2 && json2.data && typeof json2.data === "object" && json2.data.updatedAt
-              ? json2.data
-              : json2;
-        }
-      } catch {}
-    }
-
-    if (cloud && cloud.updatedAt) {
-      const isNewer = cloud.updatedAt > lastKnownCloudUpdatedAt;
-      if (isNewer || force) {
-        lastKnownCloudUpdatedAt = cloud.updatedAt;
-
-        if (cloud.overrides) {
-          const localOverrides = JSON.parse(localStorage.getItem(OVERRIDES_KEY) || "{}");
-          const mergedOverrides = { ...localOverrides, ...cloud.overrides };
-          localStorage.setItem(OVERRIDES_KEY, JSON.stringify(mergedOverrides));
-        }
-        if (Array.isArray(cloud.localProducts) && cloud.localProducts.length > 0) {
-          const localList: Product[] = JSON.parse(localStorage.getItem(LOCAL_PRODS_KEY) || "[]");
-          const map = new Map<string, Product>();
-          localList.forEach((p) => map.set(p.slug, p));
-          cloud.localProducts.forEach((p: Product) => map.set(p.slug, p));
-          localStorage.setItem(LOCAL_PRODS_KEY, JSON.stringify(Array.from(map.values())));
-        }
-        if (Array.isArray(cloud.deletedSlugs) && cloud.deletedSlugs.length > 0) {
-          const localDel: string[] = JSON.parse(localStorage.getItem(DELETED_PRODS_KEY) || "[]");
-          localStorage.setItem(DELETED_PRODS_KEY, JSON.stringify(Array.from(new Set([...localDel, ...cloud.deletedSlugs]))));
-        }
-
-        const cloudOrders = cloud.orderUpdates || cloud.orderOverrides;
-        if (cloudOrders && Object.keys(cloudOrders).length > 0) {
-          const localOrders = JSON.parse(localStorage.getItem(ORDER_UPDATES_KEY) || "{}");
-          const merged = { ...localOrders, ...cloudOrders };
-          localStorage.setItem(ORDER_UPDATES_KEY, JSON.stringify(merged));
-          localStorage.setItem(ORDER_OVERRIDES_KEY, JSON.stringify(merged));
-        }
-
-        if (Array.isArray(cloud.deletedMsgIds) && cloud.deletedMsgIds.length > 0) {
-          const localMsgIds: string[] = JSON.parse(localStorage.getItem(DELETED_MSG_IDS_KEY) || "[]");
-          localStorage.setItem(DELETED_MSG_IDS_KEY, JSON.stringify(Array.from(new Set([...localMsgIds, ...cloud.deletedMsgIds]))));
-        }
-        if (Array.isArray(cloud.deletedMsgSigs) && cloud.deletedMsgSigs.length > 0) {
-          const localMsgSigs: string[] = JSON.parse(localStorage.getItem(DELETED_MSG_SIGS_KEY) || "[]");
-          localStorage.setItem(DELETED_MSG_SIGS_KEY, JSON.stringify(Array.from(new Set([...localMsgSigs, ...cloud.deletedMsgSigs]))));
-        }
-
-        try {
-          window.dispatchEvent(new CustomEvent("cozy_cloud_synced", { detail: cloud }));
-          window.dispatchEvent(new CustomEvent("cozy_orders_updated", { detail: { sync: true } }));
-          window.dispatchEvent(new CustomEvent("cozy_messages_updated", { detail: { sync: true } }));
-          window.dispatchEvent(new CustomEvent("cozy_products_updated", { detail: { sync: true } }));
-        } catch {}
-      }
-      return cloud;
     }
   } catch {}
   return null;
@@ -544,7 +529,9 @@ export async function fetchOrders() {
   let orderOverrides: Record<string, { status?: string; isPaid?: boolean }> = {};
   if (typeof window !== "undefined") {
     try {
-      orderOverrides = JSON.parse(localStorage.getItem(ORDER_OVERRIDES_KEY) || "{}");
+      const o1 = JSON.parse(localStorage.getItem(ORDER_UPDATES_KEY) || "{}");
+      const o2 = JSON.parse(localStorage.getItem(ORDER_OVERRIDES_KEY) || "{}");
+      orderOverrides = { ...o2, ...o1 };
     } catch {}
   }
 
@@ -557,7 +544,15 @@ export async function fetchOrders() {
       const orders = await res.json();
       if (Array.isArray(orders)) {
         return orders.map((o: any) => {
-          const ov = orderOverrides[o._id || o.orderNumber];
+          const id1 = o.orderNumber;
+          const id2 = o.orderNumber ? String(o.orderNumber).replace(/^#/, "") : "";
+          const id3 = id2 ? `#${id2}` : "";
+          const ov =
+            (id1 && orderOverrides[id1]) ||
+            (id2 && orderOverrides[id2]) ||
+            (id3 && orderOverrides[id3]) ||
+            (o._id && orderOverrides[o._id]) ||
+            (o.id && orderOverrides[o.id]);
           return ov ? { ...o, ...ov } : o;
         });
       }
@@ -652,12 +647,39 @@ export async function submitCustomOrder(payload: CustomOrderPayload) {
 }
 
 export async function fetchCustomOrders() {
+  await pullFromCloudSync().catch(() => {});
+  let orderOverrides: Record<string, { status?: string; isPaid?: boolean }> = {};
+  if (typeof window !== "undefined") {
+    try {
+      const o1 = JSON.parse(localStorage.getItem(ORDER_UPDATES_KEY) || "{}");
+      const o2 = JSON.parse(localStorage.getItem(ORDER_OVERRIDES_KEY) || "{}");
+      orderOverrides = { ...o2, ...o1 };
+    } catch {}
+  }
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 4000);
     const res = await fetch(`${API_BASE}/custom-orders`, { signal: controller.signal });
     clearTimeout(timeoutId);
-    if (res.ok) return await res.json();
+    if (res.ok) {
+      const list = await res.json();
+      if (Array.isArray(list)) {
+        return list.map((co: any) => {
+          const id1 = co.customOrderId;
+          const id2 = co.customOrderId ? String(co.customOrderId).replace(/^#/, "") : "";
+          const id3 = id2 ? `#${id2}` : "";
+          const ov =
+            (id1 && orderOverrides[id1]) ||
+            (id2 && orderOverrides[id2]) ||
+            (id3 && orderOverrides[id3]) ||
+            (co._id && orderOverrides[co._id]) ||
+            (co.id && orderOverrides[co.id]);
+          return ov ? { ...co, ...ov } : co;
+        });
+      }
+      return list;
+    }
   } catch {
     // fallback
   }

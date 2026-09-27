@@ -270,7 +270,9 @@ export function AdminShell({
         let deletedSigs: string[] = [];
         if (typeof window !== "undefined") {
           try {
-            statusUpdates = JSON.parse(localStorage.getItem("cozy_studio_orders_updates") || "{}");
+            const u1 = JSON.parse(localStorage.getItem("cozy_studio_orders_updates") || "{}");
+            const u2 = JSON.parse(localStorage.getItem("cozy_studio_order_overrides") || "{}");
+            statusUpdates = { ...u2, ...u1 };
             deletedMsgIds = JSON.parse(localStorage.getItem("cozy_deleted_message_ids") || "[]");
             deletedSigs = JSON.parse(localStorage.getItem("cozy_deleted_message_sigs") || "[]");
           } catch {}

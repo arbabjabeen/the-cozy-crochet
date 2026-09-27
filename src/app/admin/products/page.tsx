@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { money, type Product, products as fallbackProducts } from "@/lib/catalog";
-import { fetchProducts, addProduct, updateProductApi, deleteProductApi, pullFromCloudSync } from "@/lib/api";
+import { fetchProducts, addProduct, updateProductApi, deleteProductApi, pullFromCloudSync, pushToCloudSync } from "@/lib/api";
 import { toast } from "sonner";
 
 export default function AdminProductsPage() {
@@ -254,6 +254,7 @@ export default function AdminProductsPage() {
           description: description.trim(),
           image: image || (typeof editingProduct.image === "string" ? editingProduct.image : ""),
         });
+        await pushToCloudSync();
         toast.success(`Updated "${name}" successfully!`);
       } else {
         // ADD NEW PRODUCT - Instant optimistic addition + await server save
@@ -299,6 +300,7 @@ export default function AdminProductsPage() {
           setItems((prev) => prev.map((p) => (p.slug === newProd.slug ? saved : p)));
         }
 
+        await pushToCloudSync();
         toast.success(`"${newProd.name}" added to catalog & store!`);
       }
     } catch {
@@ -326,6 +328,7 @@ export default function AdminProductsPage() {
       onSale: nextSale,
       originalPrice: nextSale ? nextOriginal : undefined,
     });
+    await pushToCloudSync();
     toast.success(nextSale ? `"${p.name}" is now on SALE!` : `Sale turned OFF for "${p.name}"`);
   };
 
@@ -335,6 +338,7 @@ export default function AdminProductsPage() {
     // Instant optimistic deletion (0ms)
     setItems((prev) => prev.filter((p) => p.slug !== slug));
     await deleteProductApi(slug);
+    await pushToCloudSync();
     toast.info("Product removed from catalog");
   };
 
