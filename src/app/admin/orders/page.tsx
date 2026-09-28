@@ -94,9 +94,6 @@ export default function AdminOrdersPage() {
 
   const loadAllOrders = async () => {
     try {
-      // Pull latest order statuses from Cloud Sync (e.g. from Laptop to Mobile!)
-      await pullFromCloudSync(true).catch(() => {});
-
       // 1. Read locally stored orders & status overrides first (instant 0ms render)
       let localOrders: any[] = [];
       let localCustom: any[] = [];
@@ -210,33 +207,14 @@ export default function AdminOrdersPage() {
 
   useEffect(() => {
     loadAllOrders();
-    const handleFocus = () => loadAllOrders();
-    const handleVisibility = () => {
-      if (typeof document !== "undefined" && !document.hidden) {
-        loadAllOrders();
-      }
-    };
     const handleSync = () => loadAllOrders();
 
-    window.addEventListener("focus", handleFocus);
     window.addEventListener("cozy_orders_updated", handleSync);
     window.addEventListener("cozy_cloud_synced", handleSync);
-    document.addEventListener("visibilitychange", handleVisibility);
-
-    const interval = setInterval(() => {
-      if (typeof document !== "undefined" && !document.hidden) {
-        pullFromCloudSync(true).then((c) => {
-          if (c) loadAllOrders();
-        });
-      }
-    }, 4000);
 
     return () => {
-      clearInterval(interval);
-      window.removeEventListener("focus", handleFocus);
       window.removeEventListener("cozy_orders_updated", handleSync);
       window.removeEventListener("cozy_cloud_synced", handleSync);
-      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
 
@@ -291,7 +269,7 @@ export default function AdminOrdersPage() {
       updates[hashId] = { ...(updates[hashId] || {}), isPaid };
       localStorage.setItem("cozy_studio_orders_updates", JSON.stringify(updates));
       localStorage.setItem("cozy_studio_order_overrides", JSON.stringify(updates));
-      await pushToCloudSync();
+      pushToCloudSync();
     } catch {}
 
     // 3. Fire server update in background
@@ -334,7 +312,7 @@ export default function AdminOrdersPage() {
       }
       localStorage.setItem("cozy_studio_orders_updates", JSON.stringify(updates));
       localStorage.setItem("cozy_studio_order_overrides", JSON.stringify(updates));
-      await pushToCloudSync();
+      pushToCloudSync();
 
       // Also update cozy_studio_orders if present
       const localOrders = JSON.parse(localStorage.getItem("cozy_studio_orders") || "[]");

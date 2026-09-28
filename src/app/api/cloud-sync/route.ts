@@ -8,17 +8,24 @@ const EXTENDSCLASS_BIN = "fdbebfe";
 const CLOUD_BIN_URL = `https://extendsclass.com/api/json-storage/bin/${EXTENDSCLASS_BIN}`;
 
 let memoryCache: any = null;
+let lastFetchTime = 0;
 
 const SYNC_FILE = path.join(
   typeof process !== "undefined" && process.platform === "win32" ? process.cwd() : "/tmp",
   "cozy_sync_mirror.json"
 );
 
-async function fetchFromCloudBin(): Promise<any> {
+async function fetchFromCloudBin(force = false): Promise<any> {
+  const now = Date.now();
+  // Return lightning-fast in-memory cache if queried within 1.6s
+  if (!force && memoryCache && now - lastFetchTime < 1600) {
+    return memoryCache;
+  }
+
   try {
     const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), 4000);
-    const res = await fetch(`${CLOUD_BIN_URL}?_t=${Date.now()}`, {
+    const tid = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch(`${CLOUD_BIN_URL}?_t=${now}`, {
       signal: controller.signal,
       cache: "no-store",
       headers: {
@@ -32,6 +39,7 @@ async function fetchFromCloudBin(): Promise<any> {
       const data = await res.json();
       if (data && typeof data === "object") {
         memoryCache = data;
+        lastFetchTime = Date.now();
         try {
           fs.writeFileSync(SYNC_FILE, JSON.stringify(data, null, 2), "utf-8");
         } catch {}
@@ -48,6 +56,7 @@ async function fetchFromCloudBin(): Promise<any> {
     if (fs.existsSync(SYNC_FILE)) {
       const raw = fs.readFileSync(SYNC_FILE, "utf-8");
       memoryCache = JSON.parse(raw);
+      lastFetchTime = Date.now();
       return memoryCache;
     }
   } catch {}
@@ -57,6 +66,8 @@ async function fetchFromCloudBin(): Promise<any> {
 
 async function saveToCloudBin(payload: any): Promise<boolean> {
   memoryCache = payload;
+  lastFetchTime = Date.now();
+
   try {
     fs.writeFileSync(SYNC_FILE, JSON.stringify(payload, null, 2), "utf-8");
   } catch {}
@@ -95,7 +106,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     if (body && typeof body === "object") {
-      // First get current fresh state from cloud
+      // Get current fresh state from cache or cloud
       const current = (await fetchFromCloudBin()) || {};
 
       // 1. Per-slug deep merge of overrides
@@ -167,7 +178,10 @@ export async function POST(req: NextRequest) {
         deletedMsgSigs,
       };
 
-      await saveToCloudBin(merged);
+      // Instantly update memoryCache and save to file + cloud
+      memoryCache = merged;
+      lastFetchTime = Date.now();
+      saveToCloudBin(merged).catch(() => {});
 
       return NextResponse.json(
         { success: true, data: merged },

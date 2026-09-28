@@ -96,27 +96,28 @@ export async function pushToCloudSync() {
       deletedMsgSigs,
     };
 
-    const res = await fetch(SYNC_URL, {
+    lastKnownCloudUpdatedAt = payload.updatedAt;
+
+    fetch(SYNC_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
       keepalive: true,
-    });
-    if (res.ok) {
-      return await res.json();
-    }
+    }).catch(() => {});
+
+    return payload;
   } catch {}
   return null;
 }
 
 export async function pullFromCloudSync(force = false) {
   if (typeof window === "undefined") return null;
-  if (!force && Date.now() - lastCloudSyncPull < 1200) return null;
+  if (!force && Date.now() - lastCloudSyncPull < 2000) return null;
   lastCloudSyncPull = Date.now();
 
   try {
     const controller = new AbortController();
-    const tid = setTimeout(() => controller.abort(), 4000);
+    const tid = setTimeout(() => controller.abort(), 3500);
     const res = await fetch(`${SYNC_URL}?_t=${Date.now()}`, {
       signal: controller.signal,
       cache: "no-store",
@@ -133,7 +134,7 @@ export async function pullFromCloudSync(force = false) {
 
       if (cloud && cloud.updatedAt) {
         const isNewer = cloud.updatedAt > lastKnownCloudUpdatedAt;
-        if (isNewer || force) {
+        if (isNewer) {
           lastKnownCloudUpdatedAt = cloud.updatedAt;
 
           if (cloud.overrides) {
@@ -195,9 +196,6 @@ export async function pullFromCloudSync(force = false) {
 
           try {
             window.dispatchEvent(new CustomEvent("cozy_cloud_synced", { detail: cloud }));
-            window.dispatchEvent(new CustomEvent("cozy_orders_updated", { detail: { sync: true } }));
-            window.dispatchEvent(new CustomEvent("cozy_messages_updated", { detail: { sync: true } }));
-            window.dispatchEvent(new CustomEvent("cozy_products_updated", { detail: { sync: true } }));
           } catch {}
         }
         return cloud;
@@ -205,6 +203,33 @@ export async function pullFromCloudSync(force = false) {
     }
   } catch {}
   return null;
+}
+
+let globalSyncStarted = false;
+export function startGlobalCloudSync() {
+  if (typeof window === "undefined" || globalSyncStarted) return;
+  globalSyncStarted = true;
+
+  // Initial pull
+  pullFromCloudSync();
+
+  const handleWakeup = () => {
+    if (typeof document !== "undefined" && !document.hidden) {
+      pullFromCloudSync();
+    }
+  };
+  window.addEventListener("focus", handleWakeup);
+  document.addEventListener("visibilitychange", handleWakeup);
+
+  setInterval(() => {
+    if (typeof document !== "undefined" && !document.hidden) {
+      pullFromCloudSync();
+    }
+  }, 3500);
+}
+
+if (typeof window !== "undefined") {
+  startGlobalCloudSync();
 }
 
 export async function fetchProducts(category?: string, search?: string): Promise<Product[]> {

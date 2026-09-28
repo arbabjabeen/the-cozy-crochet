@@ -58,7 +58,7 @@ export default function AdminMessagesPage() {
   const loadMessages = async () => {
     try {
       // Pull latest deleted message blacklist from cloud sync
-      await pullFromCloudSync(true).catch(() => {});
+      await pullFromCloudSync().catch(() => {});
 
       // Always read deleted blacklist first
       const deletedIds = getDeletedIds();
@@ -134,33 +134,14 @@ export default function AdminMessagesPage() {
 
   useEffect(() => {
     loadMessages();
-    const handleFocus = () => loadMessages();
-    const handleVisibility = () => {
-      if (typeof document !== "undefined" && !document.hidden) {
-        loadMessages();
-      }
-    };
     const handleSync = () => loadMessages();
 
-    window.addEventListener("focus", handleFocus);
     window.addEventListener("cozy_messages_updated", handleSync);
     window.addEventListener("cozy_cloud_synced", handleSync);
-    document.addEventListener("visibilitychange", handleVisibility);
-
-    const interval = setInterval(() => {
-      if (typeof document !== "undefined" && !document.hidden) {
-        pullFromCloudSync().then((c) => {
-          if (c) loadMessages();
-        });
-      }
-    }, 5000);
 
     return () => {
-      clearInterval(interval);
-      window.removeEventListener("focus", handleFocus);
       window.removeEventListener("cozy_messages_updated", handleSync);
       window.removeEventListener("cozy_cloud_synced", handleSync);
-      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
 

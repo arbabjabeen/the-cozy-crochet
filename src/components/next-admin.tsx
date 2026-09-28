@@ -233,8 +233,8 @@ export function AdminShell({
   useEffect(() => {
     const fetchCounts = async () => {
       try {
-        // Pull latest updates from cloud sync (e.g. status changes from Laptop to Mobile!)
-        await pullFromCloudSync(true).catch(() => {});
+        // Pull latest updates from cloud sync gracefully
+        await pullFromCloudSync().catch(() => {});
 
         let localOrders: any[] = [];
         let localCustom: any[] = [];
@@ -494,28 +494,15 @@ export function AdminShell({
       }
     };
 
-    window.addEventListener("focus", handleFocus);
     window.addEventListener("cozy_orders_updated", handleOrdersUpdated);
     window.addEventListener("cozy_messages_updated", handleMessagesUpdated);
     window.addEventListener("cozy_cloud_synced", handleSync);
-    document.addEventListener("visibilitychange", handleVisibility);
-
-    const interval = setInterval(() => {
-      if (typeof document !== "undefined" && !document.hidden) {
-        pullFromCloudSync(true).then(() => {
-          fetchCounts();
-        });
-      }
-    }, 4000);
 
     return () => {
-      clearInterval(interval);
       if (ordersDebounceTimer) clearTimeout(ordersDebounceTimer);
-      window.removeEventListener("focus", handleFocus);
       window.removeEventListener("cozy_orders_updated", handleOrdersUpdated);
       window.removeEventListener("cozy_messages_updated", handleMessagesUpdated);
       window.removeEventListener("cozy_cloud_synced", handleSync);
-      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
 

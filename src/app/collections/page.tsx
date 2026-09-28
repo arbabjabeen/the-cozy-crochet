@@ -68,17 +68,11 @@ export default function CollectionsPage() {
 
     window.addEventListener("cozy_products_updated", handleUpdated);
     window.addEventListener("cozy_cloud_synced", loadProducts);
-    window.addEventListener("focus", loadProducts);
-    document.addEventListener("visibilitychange", handleVisibility);
-    const syncInterval = setInterval(loadProducts, 5000);
 
     return () => {
       if (bc) bc.close();
       window.removeEventListener("cozy_products_updated", handleUpdated);
       window.removeEventListener("cozy_cloud_synced", loadProducts);
-      window.removeEventListener("focus", loadProducts);
-      document.removeEventListener("visibilitychange", handleVisibility);
-      clearInterval(syncInterval);
     };
   }, []);
 

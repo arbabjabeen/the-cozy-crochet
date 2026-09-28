@@ -31,9 +31,7 @@ export default function AdminProductsPage() {
   const [loading, setLoading] = useState(false);
 
   const loadData = () => {
-    pullFromCloudSync(true)
-      .catch(() => {})
-      .then(() => fetchProducts())
+    fetchProducts()
       .then((data) => {
         if (data && data.length > 0) setItems(data);
       })
@@ -54,29 +52,17 @@ export default function AdminProductsPage() {
       }
     } catch {}
 
-    const handleVisibility = () => {
-      if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        loadData();
-      }
+    const handleSync = () => {
+      fetchProducts().then((data) => {
+        if (data && data.length > 0) setItems(data);
+      });
     };
 
-    window.addEventListener("cozy_products_updated", loadData);
-    window.addEventListener("cozy_cloud_synced", loadData);
-    window.addEventListener("focus", loadData);
-    document.addEventListener("visibilitychange", handleVisibility);
-    const syncInterval = setInterval(() => {
-      if (typeof document !== "undefined" && !document.hidden) {
-        loadData();
-      }
-    }, 4000);
+    window.addEventListener("cozy_cloud_synced", handleSync);
 
     return () => {
       if (bc) bc.close();
-      window.removeEventListener("cozy_products_updated", loadData);
-      window.removeEventListener("cozy_cloud_synced", loadData);
-      window.removeEventListener("focus", loadData);
-      document.removeEventListener("visibilitychange", handleVisibility);
-      clearInterval(syncInterval);
+      window.removeEventListener("cozy_cloud_synced", handleSync);
     };
   }, []);
 
@@ -253,8 +239,8 @@ export default function AdminProductsPage() {
           badge: badge.trim(),
           description: description.trim(),
           image: image || (typeof editingProduct.image === "string" ? editingProduct.image : ""),
-        });
-        await pushToCloudSync();
+        }).catch(() => {});
+        pushToCloudSync();
         toast.success(`Updated "${name}" successfully!`);
       } else {
         // ADD NEW PRODUCT - Instant optimistic addition + await server save
@@ -281,8 +267,8 @@ export default function AdminProductsPage() {
         setItems((prev) => [newProd, ...prev]);
         setIsModalOpen(false);
 
-        // Send API addition
-        const saved = await addProduct({
+        // Send API addition in background
+        addProduct({
           slug: newProd.slug,
           name: newProd.name,
           category: newProd.category,
@@ -293,14 +279,15 @@ export default function AdminProductsPage() {
           badge: newProd.badge,
           description: newProd.description,
           image: newProd.image,
-        });
+        })
+          .then((saved) => {
+            if (saved && saved.slug !== newProd.slug) {
+              setItems((prev) => prev.map((p) => (p.slug === newProd.slug ? saved : p)));
+            }
+          })
+          .catch(() => {});
 
-        // Ensure newly saved product slug/details match
-        if (saved && saved.slug !== newProd.slug) {
-          setItems((prev) => prev.map((p) => (p.slug === newProd.slug ? saved : p)));
-        }
-
-        await pushToCloudSync();
+        pushToCloudSync();
         toast.success(`"${newProd.name}" added to catalog & store!`);
       }
     } catch {
@@ -323,12 +310,13 @@ export default function AdminProductsPage() {
       originalPrice: nextSale ? nextOriginal : p.originalPrice,
     };
 
+    // 0ms instant UI update
     setItems((prev) => prev.map((it) => (it.slug === p.slug ? updatedItem : it)));
-    await updateProductApi(p.slug, {
+    updateProductApi(p.slug, {
       onSale: nextSale,
       originalPrice: nextSale ? nextOriginal : undefined,
-    });
-    await pushToCloudSync();
+    }).catch(() => {});
+    pushToCloudSync();
     toast.success(nextSale ? `"${p.name}" is now on SALE!` : `Sale turned OFF for "${p.name}"`);
   };
 
@@ -337,8 +325,8 @@ export default function AdminProductsPage() {
     
     // Instant optimistic deletion (0ms)
     setItems((prev) => prev.filter((p) => p.slug !== slug));
-    await deleteProductApi(slug);
-    await pushToCloudSync();
+    deleteProductApi(slug).catch(() => {});
+    pushToCloudSync();
     toast.info("Product removed from catalog");
   };
 
