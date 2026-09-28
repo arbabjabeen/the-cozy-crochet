@@ -278,7 +278,6 @@ export function AdminShell({
           } catch {}
         }
         const deletedMsgSet = new Set(deletedMsgIds);
-        const deletedSigList = ["powder blue color", "strawberry keychain", ...deletedSigs];
 
         // Deduplicate orders
         const oMap = new Map();
@@ -296,24 +295,21 @@ export function AdminShell({
         });
         const cList = Array.from(cMap.values());
 
-        // Deduplicate messages & filter out deleted messages permanently
+        // Deduplicate messages & filter out only messages explicitly deleted by ID or signature
         const mMap = new Map();
-        [...localMsgs, ...remoteM].forEach((m) => {
-          const k = m._id || m.id;
+        [...remoteM, ...localMsgs].forEach((m) => {
+          const k = m && (m._id || m.id);
           if (
             k &&
             !mMap.has(k) &&
             !deletedMsgSet.has(k) &&
-            !k.startsWith("msg-demo") &&
-            k !== "msg-1790263780063" &&
-            !m.id?.startsWith("msg-demo") &&
-            m.id !== "msg-1790263780063" &&
-            !m._id?.startsWith("msg-demo") &&
-            m._id !== "msg-1790263780063"
+            !deletedMsgSet.has(m.id) &&
+            !deletedMsgSet.has(m._id) &&
+            !k.startsWith("msg-demo")
           ) {
             let isDeletedBySig = false;
-            for (const sig of deletedSigList) {
-              if (m.message && m.message.includes(sig)) {
+            for (const sig of deletedSigs) {
+              if (sig && (m.message?.trim() === sig || `${m.name || ""}::${m.message?.trim()}` === sig)) {
                 isDeletedBySig = true;
                 break;
               }

@@ -81,6 +81,7 @@ export async function pushToCloudSync() {
     const orderUpdates1 = JSON.parse(localStorage.getItem(ORDER_UPDATES_KEY) || "{}");
     const orderUpdates2 = JSON.parse(localStorage.getItem(ORDER_OVERRIDES_KEY) || "{}");
     const orderUpdates = { ...orderUpdates2, ...orderUpdates1 };
+    const localMsgs = JSON.parse(localStorage.getItem("cozy_studio_messages") || "[]");
     const deletedMsgIds = JSON.parse(localStorage.getItem(DELETED_MSG_IDS_KEY) || "[]");
     const deletedMsgSigs = JSON.parse(localStorage.getItem(DELETED_MSG_SIGS_KEY) || "[]");
 
@@ -92,6 +93,7 @@ export async function pushToCloudSync() {
       deletedSlugs,
       orderUpdates,
       orderOverrides: orderUpdates,
+      messages: localMsgs,
       deletedMsgIds,
       deletedMsgSigs,
     };
@@ -170,11 +172,39 @@ export async function pullFromCloudSync(force = false) {
 
           if (Array.isArray(cloud.deletedMsgIds) && cloud.deletedMsgIds.length > 0) {
             const localMsgIds: string[] = JSON.parse(localStorage.getItem(DELETED_MSG_IDS_KEY) || "[]");
-            localStorage.setItem(DELETED_MSG_IDS_KEY, JSON.stringify(Array.from(new Set([...localMsgIds, ...cloud.deletedMsgIds]))));
+            const updatedDeleted = Array.from(new Set([...localMsgIds, ...cloud.deletedMsgIds]));
+            localStorage.setItem(DELETED_MSG_IDS_KEY, JSON.stringify(updatedDeleted));
+
+            // Also immediately purge deleted messages from local message cache
+            const delSet = new Set(updatedDeleted);
+            try {
+              const local = JSON.parse(localStorage.getItem("cozy_studio_messages") || "[]");
+              const purged = local.filter((m: any) => {
+                const k = m && (m._id || m.id);
+                return k && !delSet.has(k) && !delSet.has(m.id) && !delSet.has(m._id);
+              });
+              localStorage.setItem("cozy_studio_messages", JSON.stringify(purged));
+            } catch {}
           }
           if (Array.isArray(cloud.deletedMsgSigs) && cloud.deletedMsgSigs.length > 0) {
             const localMsgSigs: string[] = JSON.parse(localStorage.getItem(DELETED_MSG_SIGS_KEY) || "[]");
             localStorage.setItem(DELETED_MSG_SIGS_KEY, JSON.stringify(Array.from(new Set([...localMsgSigs, ...cloud.deletedMsgSigs]))));
+          }
+
+          if (Array.isArray(cloud.messages) && cloud.messages.length > 0) {
+            const localMsgs = JSON.parse(localStorage.getItem("cozy_studio_messages") || "[]");
+            const deletedSet = new Set(Array.isArray(cloud.deletedMsgIds) ? cloud.deletedMsgIds : []);
+            const map = new Map<string, any>();
+            [...cloud.messages, ...localMsgs].forEach((m: any) => {
+              const k = m && (m._id || m.id);
+              if (k && !deletedSet.has(k) && !deletedSet.has(m.id) && !deletedSet.has(m._id) && !k.startsWith("msg-demo")) {
+                map.set(k, m);
+              }
+            });
+            const mergedMsgs = Array.from(map.values()).sort(
+              (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+            );
+            localStorage.setItem("cozy_studio_messages", JSON.stringify(mergedMsgs));
           }
 
           // Instantly patch in-memory product cache so UI reflects edits without full reload

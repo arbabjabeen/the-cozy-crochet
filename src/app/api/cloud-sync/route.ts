@@ -15,7 +15,7 @@ const SYNC_FILE = path.join(
   "cozy_sync_mirror.json"
 );
 
-async function fetchFromCloudBin(force = false): Promise<any> {
+export async function fetchFromCloudBin(force = false): Promise<any> {
   const now = Date.now();
   // Return lightning-fast in-memory cache if queried within 1.6s
   if (!force && memoryCache && now - lastFetchTime < 1600) {
@@ -64,7 +64,7 @@ async function fetchFromCloudBin(force = false): Promise<any> {
   return { name: "cozy_crochet_sync", updatedAt: 0 };
 }
 
-async function saveToCloudBin(payload: any): Promise<boolean> {
+export async function saveToCloudBin(payload: any): Promise<boolean> {
   memoryCache = payload;
   lastFetchTime = Date.now();
 
@@ -89,6 +89,35 @@ async function saveToCloudBin(payload: any): Promise<boolean> {
     console.warn("Could not push to cloud bin:", err.message);
   }
   return false;
+}
+
+export async function appendMessageToCloud(newMsg: any) {
+  try {
+    const current = (await fetchFromCloudBin()) || {};
+    const existing: any[] = Array.isArray(current.messages) ? current.messages : [];
+    const deletedSet = new Set(Array.isArray(current.deletedMsgIds) ? current.deletedMsgIds : []);
+    const k = newMsg._id || newMsg.id;
+    if (k && !deletedSet.has(k)) {
+      const map = new Map<string, any>();
+      map.set(k, newMsg);
+      existing.forEach((m: any) => {
+        const id = m && (m._id || m.id);
+        if (id && !deletedSet.has(id)) map.set(id, m);
+      });
+      const merged = {
+        ...current,
+        updatedAt: Date.now(),
+        messages: Array.from(map.values()).sort(
+          (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+        ),
+      };
+      memoryCache = merged;
+      lastFetchTime = Date.now();
+      saveToCloudBin(merged).catch(() => {});
+      return merged;
+    }
+  } catch {}
+  return null;
 }
 
 export async function GET() {
@@ -165,6 +194,48 @@ export async function POST(req: NextRequest) {
           ...(Array.isArray(body.deletedMsgSigs) ? body.deletedMsgSigs : []),
         ])
       );
+      const deletedMsgSet = new Set(deletedMsgIds);
+
+      // 6. Messages - persistently store contact messages in the cloud bin
+      const isDeletedSig = (m: any) => {
+        for (const sig of deletedMsgSigs) {
+          if (sig && (m.message?.trim() === sig || `${m.name || ""}::${m.message?.trim()}` === sig)) {
+            return true;
+          }
+        }
+        return false;
+      };
+
+      const msgMap = new Map<string, any>();
+      (current.messages || []).forEach((m: any) => {
+        const k = m && (m._id || m.id);
+        if (
+          k &&
+          !deletedMsgSet.has(k) &&
+          !deletedMsgSet.has(m.id) &&
+          !deletedMsgSet.has(m._id) &&
+          !k.startsWith("msg-demo") &&
+          !isDeletedSig(m)
+        ) {
+          msgMap.set(k, m);
+        }
+      });
+      (body.messages || []).forEach((m: any) => {
+        const k = m && (m._id || m.id);
+        if (
+          k &&
+          !deletedMsgSet.has(k) &&
+          !deletedMsgSet.has(m.id) &&
+          !deletedMsgSet.has(m._id) &&
+          !k.startsWith("msg-demo") &&
+          !isDeletedSig(m)
+        ) {
+          msgMap.set(k, m);
+        }
+      });
+      const messages = Array.from(msgMap.values()).sort(
+        (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      );
 
       const merged = {
         name: "cozy_crochet_sync",
@@ -174,6 +245,7 @@ export async function POST(req: NextRequest) {
         orderOverrides: mergedOrders,
         localProducts,
         deletedSlugs,
+        messages,
         deletedMsgIds,
         deletedMsgSigs,
       };

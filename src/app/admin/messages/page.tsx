@@ -13,13 +13,9 @@ const DELETED_SIGS_KEY = "cozy_deleted_message_sigs";
 function getDeletedIds(): Set<string> {
   try {
     const raw = localStorage.getItem(DELETED_KEY);
-    const set = new Set<string>(raw ? JSON.parse(raw) : []);
-    set.add("msg-demo-1");
-    set.add("msg-demo-2");
-    set.add("msg-1790263780063");
-    return set;
+    return new Set<string>(raw ? JSON.parse(raw) : []);
   } catch {
-    return new Set<string>(["msg-demo-1", "msg-demo-2", "msg-1790263780063"]);
+    return new Set<string>();
   }
 }
 
@@ -34,12 +30,9 @@ function addDeletedId(id: string) {
 function getDeletedSignatures(): Set<string> {
   try {
     const raw = localStorage.getItem(DELETED_SIGS_KEY);
-    const set = new Set<string>(raw ? JSON.parse(raw) : []);
-    set.add("powder blue color");
-    set.add("strawberry keychain");
-    return set;
+    return new Set<string>(raw ? JSON.parse(raw) : []);
   } catch {
-    return new Set<string>(["powder blue color", "strawberry keychain"]);
+    return new Set<string>();
   }
 }
 
@@ -57,10 +50,9 @@ export default function AdminMessagesPage() {
 
   const loadMessages = async () => {
     try {
-      // Pull latest deleted message blacklist from cloud sync
+      // Pull latest deleted message blacklist & cloud messages
       await pullFromCloudSync().catch(() => {});
 
-      // Always read deleted blacklist first
       const deletedIds = getDeletedIds();
       const deletedSigs = getDeletedSignatures();
 
@@ -71,14 +63,12 @@ export default function AdminMessagesPage() {
 
       // Fetch from server
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
       let remoteMsgs: any[] = [];
-      let serverOk = false;
       try {
         const res = await fetch("/api/contact", { signal: controller.signal });
         clearTimeout(timeoutId);
         if (res.ok) {
-          serverOk = true;
           const data = await res.json();
           if (Array.isArray(data)) remoteMsgs = data;
         }
@@ -86,45 +76,33 @@ export default function AdminMessagesPage() {
         clearTimeout(timeoutId);
       }
 
-      // If server responded successfully, sync localStorage to prevent stale ghosts
-      if (serverOk) {
-        try {
-          const sanitizedRemote = remoteMsgs.filter((m) => {
-            const key = m._id || m.id;
-            if (!key || deletedIds.has(key)) return false;
-            if (key.startsWith("msg-demo") || key === "msg-1790263780063") return false;
-            for (const sig of deletedSigs) {
-              if (m.message && m.message.includes(sig)) return false;
-            }
-            return true;
-          });
-          localStorage.setItem("cozy_studio_messages", JSON.stringify(sanitizedRemote));
-        } catch {}
-      }
-
-      // Merge + deduplicate + filter deleted + purge demo messages
-      const merged = serverOk ? remoteMsgs : [...localMsgs, ...remoteMsgs];
+      // Merge remote + local, keeping all real customer messages
       const seen = new Set<string>();
-      const unique = merged.filter((m) => {
-        const key = m._id || m.id;
-        if (!key || seen.has(key) || deletedIds.has(key)) return false;
-        if (
-          key.startsWith("msg-demo") ||
-          key === "msg-1790263780063" ||
-          (m.id && (m.id.startsWith("msg-demo") || m.id === "msg-1790263780063")) ||
-          (m._id && (m._id.startsWith("msg-demo") || m._id === "msg-1790263780063"))
-        ) {
-          return false;
-        }
+      const unique: any[] = [];
+
+      [...remoteMsgs, ...localMsgs].forEach((m) => {
+        const key = m && (m._id || m.id);
+        if (!key || seen.has(key) || deletedIds.has(key) || deletedIds.has(m.id) || (m._id && deletedIds.has(m._id))) return;
+        if (key.startsWith("msg-demo")) return;
+
+        let isDeletedBySig = false;
         for (const sig of deletedSigs) {
-          if (m.message && m.message.includes(sig)) return false;
+          if (sig && (m.message?.trim() === sig || `${m.name || ""}::${m.message?.trim()}` === sig)) {
+            isDeletedBySig = true;
+            break;
+          }
         }
+        if (isDeletedBySig) return;
+
         seen.add(key);
-        return true;
+        unique.push(m);
       });
 
-      unique.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      unique.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
       setMessages(unique);
+      try {
+        localStorage.setItem("cozy_studio_messages", JSON.stringify(unique));
+      } catch {}
     } catch {
       // keep existing
     } finally {
