@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
 
     if (category && category !== "All") {
       if (category.toLowerCase() === "sale") {
-        list = list.filter((p) => Boolean(p.onSale || (p.originalPrice && p.originalPrice > p.price)));
+        list = list.filter((p) => Boolean(p.onSale));
       } else {
         list = list.filter((p) => p.category?.toLowerCase() === category.toLowerCase());
       }

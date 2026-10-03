@@ -424,9 +424,7 @@ export function ProductCard({
   };
 
   const imageSrc = typeof product.image === "string" ? product.image : (product.image as any)?.src || "/assets/cloud-throw.jpg";
-  const isSale = Boolean(
-    product.onSale || (product.originalPrice && product.originalPrice > product.price)
-  );
+  const isSale = Boolean(product.onSale);
   const effectiveOriginal =
     product.originalPrice && product.originalPrice > product.price
       ? product.originalPrice

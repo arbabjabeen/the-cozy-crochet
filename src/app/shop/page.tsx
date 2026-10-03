@@ -153,7 +153,7 @@ function ShopContent() {
     if (activeCatLower === "all") {
       matchesCat = true;
     } else if (isSaleCat(activeCatLower)) {
-      matchesCat = Boolean(p.onSale || (p.originalPrice && p.originalPrice > p.price));
+      matchesCat = Boolean(p.onSale);
     } else {
       matchesCat = pCatLower === activeCatLower;
     }

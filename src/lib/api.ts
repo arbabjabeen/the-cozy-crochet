@@ -269,7 +269,7 @@ export async function fetchProducts(category?: string, search?: string): Promise
     if (!hasFilter) return list;
     return list.filter((p) => {
       if (category && category.toLowerCase() === "sale") {
-        const isSale = Boolean(p.onSale || (p.originalPrice && p.originalPrice > p.price));
+        const isSale = Boolean(p.onSale);
         const matchesSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
         return isSale && matchesSearch;
       }
@@ -473,20 +473,46 @@ export async function updateProductApi(idOrSlug: string, updates: Partial<Produc
     try {
       const raw = localStorage.getItem(OVERRIDES_KEY);
       const overrides = raw ? JSON.parse(raw) : {};
-      overrides[idOrSlug] = { ...(overrides[idOrSlug] || {}), ...updates };
+      if (updates.onSale === false) {
+        delete overrides[idOrSlug]?.originalPrice;
+        overrides[idOrSlug] = { ...(overrides[idOrSlug] || {}), ...updates, onSale: false };
+        delete overrides[idOrSlug].originalPrice;
+      } else {
+        overrides[idOrSlug] = { ...(overrides[idOrSlug] || {}), ...updates };
+      }
       localStorage.setItem(OVERRIDES_KEY, JSON.stringify(overrides));
 
       const rawLocal = localStorage.getItem(LOCAL_PRODS_KEY);
       if (rawLocal) {
         const localList: Product[] = JSON.parse(rawLocal);
-        const updatedLocal = localList.map((p) => (p.slug === idOrSlug ? { ...p, ...updates } : p));
+        const updatedLocal = localList.map((p) => {
+          if (p.slug === idOrSlug) {
+            const up = { ...p, ...updates };
+            if (updates.onSale === false) {
+              up.onSale = false;
+              delete up.originalPrice;
+            }
+            return up;
+          }
+          return p;
+        });
         localStorage.setItem(LOCAL_PRODS_KEY, JSON.stringify(updatedLocal));
       }
     } catch {}
   }
 
   const current = getCachedProducts() || fallbackProducts;
-  const next = current.map((p) => (p.slug === idOrSlug ? { ...p, ...updates, ...(result || {}) } : p));
+  const next = current.map((p) => {
+    if (p.slug === idOrSlug) {
+      const merged = { ...p, ...updates, ...(result || {}) };
+      if (updates.onSale === false) {
+        merged.onSale = false;
+        delete merged.originalPrice;
+      }
+      return merged;
+    }
+    return p;
+  });
   saveCachedProducts(next);
 
   const updatedObj = next.find((p) => p.slug === idOrSlug);

@@ -233,7 +233,7 @@ export default function AdminProductsPage() {
           name: name.trim(),
           category: finalCategory,
           price: numPrice,
-          originalPrice: isOnSale ? numOriginal : undefined,
+          originalPrice: isOnSale ? numOriginal : (null as any),
           onSale: isOnSale,
           stock: parseInt(stock, 10) || 1,
           badge: badge.trim(),
@@ -307,14 +307,14 @@ export default function AdminProductsPage() {
     const updatedItem: Product = {
       ...p,
       onSale: nextSale,
-      originalPrice: nextSale ? nextOriginal : p.originalPrice,
+      originalPrice: nextSale ? nextOriginal : undefined,
     };
 
     // 0ms instant UI update
     setItems((prev) => prev.map((it) => (it.slug === p.slug ? updatedItem : it)));
     await updateProductApi(p.slug, {
       onSale: nextSale,
-      originalPrice: nextSale ? nextOriginal : undefined,
+      originalPrice: nextSale ? nextOriginal : (null as any),
     }).catch(() => {});
     pushToCloudSync();
     toast.success(nextSale ? `"${p.name}" is now on SALE!` : `Sale turned OFF for "${p.name}"`);

@@ -142,10 +142,15 @@ export async function POST(req: NextRequest) {
       const mergedOverrides = { ...(current.overrides || {}) };
       if (body.overrides && typeof body.overrides === "object") {
         for (const slug of Object.keys(body.overrides)) {
+          const incoming = body.overrides[slug] || {};
           mergedOverrides[slug] = {
             ...(mergedOverrides[slug] || {}),
-            ...(body.overrides[slug] || {}),
+            ...incoming,
           };
+          if (incoming.onSale === false) {
+            delete mergedOverrides[slug].originalPrice;
+            mergedOverrides[slug].onSale = false;
+          }
         }
       }
 

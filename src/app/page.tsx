@@ -112,7 +112,7 @@ export default function HomePage() {
 
   const categories = Array.from(productCategoriesMap.values());
   const saleProducts = featuredProducts.filter(
-    (p) => Boolean(p.onSale || (p.originalPrice && p.originalPrice > p.price))
+    (p) => Boolean(p.onSale)
   );
 
   return (
@@ -177,7 +177,7 @@ export default function HomePage() {
               const catSaleCount = featuredProducts.filter(
                 (p) =>
                   p.category?.toLowerCase() === cat.name.toLowerCase() &&
-                  Boolean(p.onSale || (p.originalPrice && p.originalPrice > p.price))
+                  Boolean(p.onSale)
               ).length;
 
               return (
