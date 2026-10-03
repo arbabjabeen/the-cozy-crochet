@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/button";
 import { ProductGrid, StoreShell } from "@/components/next-storefront";
 import { money, products, type Product, type Review } from "@/lib/catalog";
 import { useCart } from "@/context/CartContext";
-import { fetchProductBySlug, addProductReview, fetchProducts } from "@/lib/api";
+import { fetchProductBySlug, addProductReview, fetchProducts, getCachedProducts } from "@/lib/api";
 import { CustomOrderModal } from "@/components/custom-order-modal";
 
 export default function ProductDetailPage() {
@@ -32,9 +32,14 @@ export default function ProductDetailPage() {
   const router = useRouter();
   const slug = (params?.["slug"] ?? "") as string;
 
-  const [product, setProduct] = useState<Product | undefined>(() =>
-    products.find((p) => p.slug === slug)
-  );
+  const [product, setProduct] = useState<Product | undefined>(() => {
+    if (typeof window !== "undefined") {
+      const cached = getCachedProducts();
+      const match = cached?.find((p: Product) => p.slug === slug);
+      if (match) return match;
+    }
+    return products.find((p) => p.slug === slug);
+  });
   const [recommended, setRecommended] = useState<Product[]>([]);
   const [loading, setLoading] = useState(!product);
   const [qty, setQty] = useState(1);
@@ -56,8 +61,8 @@ export default function ProductDetailPage() {
   const { addToCart } = useCart();
 
   useEffect(() => {
-    if (slug) {
-      if (!product) setLoading(true);
+    const loadDetail = () => {
+      if (!slug) return;
       fetchProductBySlug(slug)
         .then((p) => {
           if (p) {
@@ -75,7 +80,25 @@ export default function ProductDetailPage() {
           }
         })
         .catch(() => {});
-    }
+    };
+
+    loadDetail();
+
+    const handleUpdated = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      if (detail && detail.slug === slug) {
+        setProduct((prev) => (prev ? { ...prev, ...detail } : detail));
+      }
+      loadDetail();
+    };
+
+    window.addEventListener("cozy_products_updated", handleUpdated);
+    window.addEventListener("cozy_cloud_synced", loadDetail);
+
+    return () => {
+      window.removeEventListener("cozy_products_updated", handleUpdated);
+      window.removeEventListener("cozy_cloud_synced", loadDetail);
+    };
   }, [slug]);
 
   // Sync reviews when product changes

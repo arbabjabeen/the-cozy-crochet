@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Plus, RefreshCw, Package, ArrowRight } from "lucide-react";
 import { AdminShell, AdminTable, StatCard } from "@/components/next-admin";
 import { Button } from "@/components/ui/button";
-import { fetchProducts } from "@/lib/api";
+import { fetchProducts, updateProductApi, pushToCloudSync } from "@/lib/api";
 import { products as fallbackProducts } from "@/lib/catalog";
 import { toast } from "sonner";
 
@@ -31,26 +31,16 @@ export default function AdminInventoryPage() {
   }, []);
 
   // Quick product stock adjustment (+ / -) - Instant 0ms optimistic update
-  const handleUpdateProductStock = (slug: string, newStock: number) => {
+  const handleUpdateProductStock = async (slug: string, newStock: number) => {
     const validStock = Math.max(0, newStock);
     setProducts((prev) =>
       prev.map((p) => (p.slug === slug ? { ...p, stock: validStock } : p))
     );
     toast.success(`Updated stock to ${validStock}`);
 
-    // Update catalog cache
-    try {
-      const cached = JSON.parse(sessionStorage.getItem("cozy_cached_products") || "[]");
-      const next = cached.map((p: any) => (p.slug === slug ? { ...p, stock: validStock } : p));
-      sessionStorage.setItem("cozy_cached_products", JSON.stringify(next));
-    } catch {}
-
-    // Send API in background
-    fetch(`/api/products/${slug}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ stock: validStock }),
-    }).catch(() => {});
+    // Update catalog cache & cloud sync instantly
+    await updateProductApi(slug, { stock: validStock }).catch(() => {});
+    pushToCloudSync();
   };
 
   const totalStockUnits = products.reduce((acc, p) => acc + (Number(p.stock) || 0), 0);

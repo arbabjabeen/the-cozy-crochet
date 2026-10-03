@@ -312,7 +312,7 @@ export default function AdminProductsPage() {
 
     // 0ms instant UI update
     setItems((prev) => prev.map((it) => (it.slug === p.slug ? updatedItem : it)));
-    updateProductApi(p.slug, {
+    await updateProductApi(p.slug, {
       onSale: nextSale,
       originalPrice: nextSale ? nextOriginal : undefined,
     }).catch(() => {});
@@ -325,7 +325,7 @@ export default function AdminProductsPage() {
     
     // Instant optimistic deletion (0ms)
     setItems((prev) => prev.filter((p) => p.slug !== slug));
-    deleteProductApi(slug).catch(() => {});
+    await deleteProductApi(slug).catch(() => {});
     pushToCloudSync();
     toast.info("Product removed from catalog");
   };
