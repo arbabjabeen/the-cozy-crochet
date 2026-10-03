@@ -650,8 +650,18 @@ export function AdminShell({
         </nav>
 
         <div className="space-y-1 border-t border-border pt-3">
-          <Button variant="ghost" className="w-full justify-start text-xs">
-            <Settings className="size-4 mr-2" /> Settings
+          <Button
+            variant="ghost"
+            asChild
+            className={`w-full justify-start text-xs ${
+              pathname === "/admin/settings"
+                ? "bg-primary text-primary-foreground font-bold shadow-xs hover:bg-primary/90"
+                : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+            }`}
+          >
+            <Link href="/admin/settings" onClick={() => setOpen(false)}>
+              <Settings className="size-4 mr-2" /> Settings
+            </Link>
           </Button>
           <Button
             variant="ghost"

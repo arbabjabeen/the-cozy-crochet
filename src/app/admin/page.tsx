@@ -103,16 +103,7 @@ export default function AdminDashboardPage() {
     window.addEventListener("cozy_cloud_synced", handleSync);
     document.addEventListener("visibilitychange", handleVisibility);
 
-    const interval = setInterval(() => {
-      if (typeof document !== "undefined" && !document.hidden) {
-        pullFromCloudSync().then((c) => {
-          if (c) loadData();
-        });
-      }
-    }, 6000);
-
     return () => {
-      clearInterval(interval);
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("cozy_orders_updated", handleSync);
       window.removeEventListener("cozy_cloud_synced", handleSync);
