@@ -715,18 +715,25 @@ export async function updateProduct(
       const name = updates.name !== undefined ? updates.name : current.name;
       const category = updates.category !== undefined ? updates.category : current.category;
       const price = updates.price !== undefined ? Number(updates.price) : current.price;
+      const onSale =
+        updates.onSale !== undefined ? Boolean(updates.onSale) : Boolean(current.on_sale);
       const originalPrice =
-        updates.originalPrice !== undefined
+        !onSale
+          ? null
+          : updates.originalPrice !== undefined
           ? updates.originalPrice
             ? Number(updates.originalPrice)
             : null
           : current.original_price;
-      const onSale =
-        updates.onSale !== undefined ? Boolean(updates.onSale) : Boolean(current.on_sale);
       const stock = updates.stock !== undefined ? Math.max(0, Number(updates.stock)) : current.stock;
       const image = updates.image !== undefined ? updates.image : current.image;
       const description = updates.description !== undefined ? updates.description : current.description;
-      const badge = updates.badge !== undefined ? updates.badge : current.badge;
+      const badge =
+        !onSale && (updates.badge?.toLowerCase().trim() === "sale" || current.badge?.toLowerCase().trim() === "sale")
+          ? ""
+          : updates.badge !== undefined
+          ? updates.badge
+          : current.badge;
 
       const updatedRes = await pool.query(
         `UPDATE products
@@ -758,6 +765,10 @@ export async function updateProduct(
   if (updates.originalPrice !== undefined)
     product.originalPrice = updates.originalPrice ? Number(updates.originalPrice) : undefined;
   if (updates.onSale !== undefined) product.onSale = Boolean(updates.onSale);
+  if (product.onSale === false) {
+    product.originalPrice = undefined;
+    if (product.badge?.toLowerCase().trim() === "sale") product.badge = "";
+  }
   if (updates.name !== undefined) product.name = updates.name;
   if (updates.category !== undefined) product.category = updates.category;
   if (updates.image !== undefined) product.image = updates.image;

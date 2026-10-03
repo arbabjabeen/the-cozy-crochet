@@ -229,15 +229,15 @@ export function ProductCard({
     }
   };
 
-  const isSale = Boolean(
-    product.onSale || (product.originalPrice && product.originalPrice > product.price)
-  );
+  const isSale = Boolean(product.onSale);
   const effectiveOriginal =
-    product.originalPrice && product.originalPrice > product.price
+    isSale && product.originalPrice && product.originalPrice > product.price
       ? product.originalPrice
-      : Math.round(product.price * 1.25);
+      : isSale
+      ? Math.round(product.price * 1.25)
+      : null;
 
-  const discountPercent = isSale
+  const discountPercent = isSale && effectiveOriginal
     ? Math.round(((effectiveOriginal - product.price) / effectiveOriginal) * 100)
     : null;
 
@@ -287,9 +287,11 @@ export function ProductCard({
                 <span className="font-bold text-rose-600 dark:text-rose-400">
                   {money(product.price)}
                 </span>
-                <span className="text-[11px] text-muted-foreground line-through">
-                  {money(effectiveOriginal)}
-                </span>
+                {effectiveOriginal ? (
+                  <span className="text-[11px] text-muted-foreground line-through">
+                    {money(effectiveOriginal)}
+                  </span>
+                ) : null}
               </div>
             ) : (
               <p className="font-semibold text-primary">{money(product.price)}</p>

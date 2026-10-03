@@ -19,11 +19,21 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
   const overrides = cloudData?.overrides?.[slug] || {};
   const localProd = (cloudData?.localProducts || []).find((p: any) => p.slug === slug);
 
-  const finalProduct = localProd
+  let finalProduct = localProd
     ? { ...localProd, ...overrides }
     : product
     ? { ...product, ...overrides }
     : null;
+
+  if (finalProduct) {
+    if (overrides.onSale === false || finalProduct.onSale === false) {
+      finalProduct.onSale = false;
+      delete finalProduct.originalPrice;
+      if (finalProduct.badge?.toLowerCase().trim() === "sale") {
+        finalProduct.badge = "";
+      }
+    }
+  }
 
   if (!finalProduct) return NextResponse.json({ message: "Product not found" }, { status: 404 });
   return NextResponse.json(finalProduct, {
@@ -45,15 +55,47 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ s
     const cloud = (await fetchFromCloudBin()) || {};
     const overrides = { ...(cloud.overrides || {}) };
     overrides[slug] = { ...(overrides[slug] || {}), ...body };
+    if (body.onSale === false) {
+      overrides[slug].onSale = false;
+      delete overrides[slug].originalPrice;
+      if (overrides[slug].badge?.toLowerCase().trim() === "sale") {
+        overrides[slug].badge = "";
+      }
+    }
+    const localProducts = (cloud.localProducts || []).map((p: any) => {
+      if (p.slug === slug) {
+        const up = { ...p, ...body };
+        if (body.onSale === false) {
+          up.onSale = false;
+          delete up.originalPrice;
+          if (up.badge?.toLowerCase().trim() === "sale") {
+            up.badge = "";
+          }
+        }
+        return up;
+      }
+      return p;
+    });
+
     const updatedCloud = {
       ...cloud,
       updatedAt: Date.now(),
       overrides,
+      localProducts,
     };
     await saveToCloudBin(updatedCloud);
   } catch {}
 
-  return NextResponse.json(product || { slug, ...body });
+  const resProd = product ? { ...product } : { slug, ...body };
+  if (body.onSale === false && resProd) {
+    resProd.onSale = false;
+    delete (resProd as any).originalPrice;
+    if ((resProd as any).badge?.toLowerCase().trim() === "sale") {
+      (resProd as any).badge = "";
+    }
+  }
+
+  return NextResponse.json(resProd);
 }
 
 export { PATCH as PUT };

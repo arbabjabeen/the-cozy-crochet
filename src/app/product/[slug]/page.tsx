@@ -218,11 +218,13 @@ export default function ProductDetailPage() {
 
   const isSale = Boolean(product.onSale);
   const effectiveOriginal =
-    product.originalPrice && product.originalPrice > product.price
+    isSale && product.originalPrice && product.originalPrice > product.price
       ? product.originalPrice
-      : Math.round(product.price * 1.25);
+      : isSale
+      ? Math.round(product.price * 1.25)
+      : null;
 
-  const discountPercent = isSale
+  const discountPercent = isSale && effectiveOriginal
     ? Math.round(((effectiveOriginal - product.price) / effectiveOriginal) * 100)
     : null;
 
@@ -238,7 +240,7 @@ export default function ProductDetailPage() {
             height={912}
             className="aspect-square w-full rounded-2xl sm:rounded-3xl object-cover shadow-sm ring-1 border border-border"
           />
-          {product.badge && (
+          {product.badge && product.badge.toLowerCase().trim() !== "sale" && (
             <span className="absolute left-3.5 top-3.5 rounded-full bg-card/90 backdrop-blur-sm px-3 py-1 text-[11px] sm:text-xs font-bold uppercase tracking-wider shadow-xs border border-border">
               {product.badge}
             </span>
@@ -269,7 +271,7 @@ export default function ProductDetailPage() {
                 <p className={`font-display text-2xl sm:text-3xl font-medium ${isSale ? "text-rose-600 dark:text-rose-400 font-bold" : "text-primary"}`}>
                   {money(product.price)}
                 </p>
-                {isSale && (
+                {isSale && effectiveOriginal ? (
                   <>
                     <span className="text-base sm:text-lg text-muted-foreground line-through">
                       {money(effectiveOriginal)}
@@ -278,7 +280,7 @@ export default function ProductDetailPage() {
                       Save {money(effectiveOriginal - product.price)}
                     </span>
                   </>
-                )}
+                ) : null}
               </div>
 
               {/* Clickable star summary */}

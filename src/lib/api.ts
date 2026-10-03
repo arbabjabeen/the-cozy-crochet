@@ -218,7 +218,15 @@ export async function pullFromCloudSync(force = false) {
             [...currentLocal, ...base].forEach((p) => {
               if (p && p.slug && !currentDeleted.has(p.slug)) {
                 const ov = currentOverrides[p.slug] || {};
-                map.set(p.slug, { ...p, ...ov });
+                const merged: Product = { ...p, ...ov };
+                if (merged.onSale === false || ov.onSale === false) {
+                  merged.onSale = false;
+                  delete merged.originalPrice;
+                  if (merged.badge?.toLowerCase().trim() === "sale") {
+                    merged.badge = "";
+                  }
+                }
+                map.set(p.slug, merged);
               }
             });
             saveCachedProducts(Array.from(map.values()));
@@ -329,6 +337,13 @@ export async function fetchProducts(category?: string, search?: string): Promise
           seenSlugs.add(raw.slug);
           const override = productOverrides[raw.slug] || {};
           const patched: Product = { ...raw, ...override };
+          if (patched.onSale === false || override.onSale === false) {
+            patched.onSale = false;
+            delete patched.originalPrice;
+            if (patched.badge?.toLowerCase().trim() === "sale") {
+              patched.badge = "";
+            }
+          }
           merged.push(patched);
         }
 
@@ -338,6 +353,13 @@ export async function fetchProducts(category?: string, search?: string): Promise
           seenSlugs.add(raw.slug);
           const override = productOverrides[raw.slug] || {};
           const patched: Product = { ...raw, ...override };
+          if (patched.onSale === false || override.onSale === false) {
+            patched.onSale = false;
+            delete patched.originalPrice;
+            if (patched.badge?.toLowerCase().trim() === "sale") {
+              patched.badge = "";
+            }
+          }
           merged.push(patched);
         }
 
@@ -355,7 +377,18 @@ export async function fetchProducts(category?: string, search?: string): Promise
   const base = getCachedProducts() || fallbackProducts;
   const resolvedBase = base
     .filter((p) => !deletedSlugs.has(p.slug))
-    .map((p) => (productOverrides[p.slug] ? { ...p, ...productOverrides[p.slug] } : p));
+    .map((p) => {
+      const ov = productOverrides[p.slug];
+      const merged: Product = ov ? { ...p, ...ov } : { ...p };
+      if (merged.onSale === false || ov?.onSale === false) {
+        merged.onSale = false;
+        delete merged.originalPrice;
+        if (merged.badge?.toLowerCase().trim() === "sale") {
+          merged.badge = "";
+        }
+      }
+      return merged;
+    });
 
   return filterList(resolvedBase);
 }
@@ -477,6 +510,9 @@ export async function updateProductApi(idOrSlug: string, updates: Partial<Produc
         delete overrides[idOrSlug]?.originalPrice;
         overrides[idOrSlug] = { ...(overrides[idOrSlug] || {}), ...updates, onSale: false };
         delete overrides[idOrSlug].originalPrice;
+        if (overrides[idOrSlug].badge?.toLowerCase().trim() === "sale") {
+          overrides[idOrSlug].badge = "";
+        }
       } else {
         overrides[idOrSlug] = { ...(overrides[idOrSlug] || {}), ...updates };
       }
@@ -491,6 +527,9 @@ export async function updateProductApi(idOrSlug: string, updates: Partial<Produc
             if (updates.onSale === false) {
               up.onSale = false;
               delete up.originalPrice;
+              if (up.badge?.toLowerCase().trim() === "sale") {
+                up.badge = "";
+              }
             }
             return up;
           }
@@ -508,6 +547,9 @@ export async function updateProductApi(idOrSlug: string, updates: Partial<Produc
       if (updates.onSale === false) {
         merged.onSale = false;
         delete merged.originalPrice;
+        if (merged.badge?.toLowerCase().trim() === "sale") {
+          merged.badge = "";
+        }
       }
       return merged;
     }

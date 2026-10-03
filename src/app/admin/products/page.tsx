@@ -91,10 +91,10 @@ export default function AdminProductsPage() {
     setEditingProduct(p);
     setName(p.name);
     setPrice(String(p.price));
-    setOriginalPrice(p.originalPrice ? String(p.originalPrice) : "");
-    setIsOnSale(Boolean(p.onSale || (p.originalPrice && p.originalPrice > p.price)));
+    setIsOnSale(Boolean(p.onSale));
     setStock(String(p.stock !== undefined ? p.stock : 1));
-    setBadge(p.badge || "");
+    const initialBadge = p.badge || "";
+    setBadge(!p.onSale && initialBadge.toLowerCase().trim() === "sale" ? "" : initialBadge);
     setDescription(p.description || "");
     setImage(typeof p.image === "string" ? p.image : (p.image as any)?.src || "");
     
@@ -204,10 +204,11 @@ export default function AdminProductsPage() {
 
     setSubmitting(true);
     const numPrice = parseFloat(effectivePrice) || 10;
-    let numOriginal = originalPrice ? parseFloat(originalPrice) : undefined;
+    let numOriginal = isOnSale && originalPrice ? parseFloat(originalPrice) : undefined;
     if (isOnSale && (!numOriginal || numOriginal <= numPrice)) {
       numOriginal = Math.round(numPrice * 1.25);
     }
+    const cleanBadge = !isOnSale && badge.toLowerCase().trim() === "sale" ? "" : badge.trim();
 
     try {
       if (editingProduct) {
@@ -220,7 +221,7 @@ export default function AdminProductsPage() {
           originalPrice: isOnSale ? numOriginal : undefined,
           onSale: isOnSale,
           stock: parseInt(stock, 10) || 1,
-          badge: badge.trim(),
+          badge: cleanBadge,
           description: description.trim() || editingProduct.description,
           image: image || editingProduct.image,
         };
@@ -236,7 +237,7 @@ export default function AdminProductsPage() {
           originalPrice: isOnSale ? numOriginal : (null as any),
           onSale: isOnSale,
           stock: parseInt(stock, 10) || 1,
-          badge: badge.trim(),
+          badge: cleanBadge,
           description: description.trim(),
           image: image || (typeof editingProduct.image === "string" ? editingProduct.image : ""),
         }).catch(() => {});
@@ -303,11 +304,13 @@ export default function AdminProductsPage() {
     if (nextSale && (!nextOriginal || nextOriginal <= p.price)) {
       nextOriginal = Math.round(p.price * 1.25);
     }
+    const nextBadge = !nextSale && p.badge?.toLowerCase().trim() === "sale" ? "" : p.badge;
 
     const updatedItem: Product = {
       ...p,
       onSale: nextSale,
       originalPrice: nextSale ? nextOriginal : undefined,
+      badge: nextBadge,
     };
 
     // 0ms instant UI update
@@ -315,6 +318,7 @@ export default function AdminProductsPage() {
     await updateProductApi(p.slug, {
       onSale: nextSale,
       originalPrice: nextSale ? nextOriginal : (null as any),
+      badge: nextBadge,
     }).catch(() => {});
     pushToCloudSync();
     toast.success(nextSale ? `"${p.name}" is now on SALE!` : `Sale turned OFF for "${p.name}"`);
@@ -365,7 +369,7 @@ export default function AdminProductsPage() {
                 : (p.image as any)?.src || "/assets/cloud-throw.jpg";
 
             const rowKey = (p as any)._id || p.slug;
-            const isProductOnSale = Boolean(p.onSale && p.originalPrice && p.originalPrice > p.price);
+            const isProductOnSale = Boolean(p.onSale);
 
             return [
               <div className="flex items-center gap-3" key={`p-cell-${rowKey}`}>

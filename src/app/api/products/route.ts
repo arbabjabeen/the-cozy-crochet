@@ -25,7 +25,15 @@ export async function GET(request: NextRequest) {
     baseProducts.forEach((p: any) => {
       if (p?.slug && !deletedSlugs.has(p.slug)) {
         const ov = overrides[p.slug] || {};
-        map.set(p.slug, { ...p, ...ov });
+        const merged = { ...p, ...ov };
+        if (ov.onSale === false || merged.onSale === false) {
+          merged.onSale = false;
+          delete merged.originalPrice;
+          if (merged.badge?.toLowerCase().trim() === "sale") {
+            merged.badge = "";
+          }
+        }
+        map.set(p.slug, merged);
       }
     });
 
@@ -34,7 +42,15 @@ export async function GET(request: NextRequest) {
       if (p?.slug && !deletedSlugs.has(p.slug)) {
         const ov = overrides[p.slug] || {};
         const existing = map.get(p.slug) || {};
-        map.set(p.slug, { ...existing, ...p, ...ov });
+        const merged = { ...existing, ...p, ...ov };
+        if (ov.onSale === false || p.onSale === false || merged.onSale === false) {
+          merged.onSale = false;
+          delete merged.originalPrice;
+          if (merged.badge?.toLowerCase().trim() === "sale") {
+            merged.badge = "";
+          }
+        }
+        map.set(p.slug, merged);
       }
     });
 

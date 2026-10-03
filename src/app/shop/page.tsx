@@ -94,7 +94,7 @@ function ShopContent() {
   }, [searchParams]);
 
   // Dynamically extract only categories that actually have products in the store!
-  const hasAnySale = allProducts.some((p) => Boolean(p.onSale || (p.originalPrice && p.originalPrice > p.price)));
+  const hasAnySale = allProducts.some((p) => Boolean(p.onSale));
   const catsMap = new Map<string, string>();
 
   allProducts.forEach((p) => {
@@ -224,9 +224,7 @@ function ShopContent() {
                 c.toLowerCase() === "all"
                   ? allProducts.length
                   : isSaleBtn
-                  ? allProducts.filter(
-                      (p) => Boolean(p.onSale || (p.originalPrice && p.originalPrice > p.price))
-                    ).length
+                  ? allProducts.filter((p) => Boolean(p.onSale)).length
                   : allProducts.filter(
                       (p) => p.category?.toLowerCase().trim() === c.toLowerCase().trim()
                     ).length;

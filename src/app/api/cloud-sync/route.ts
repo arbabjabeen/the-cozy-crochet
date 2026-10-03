@@ -150,6 +150,9 @@ export async function POST(req: NextRequest) {
           if (incoming.onSale === false) {
             delete mergedOverrides[slug].originalPrice;
             mergedOverrides[slug].onSale = false;
+            if (mergedOverrides[slug].badge?.toLowerCase().trim() === "sale") {
+              mergedOverrides[slug].badge = "";
+            }
           }
         }
       }
@@ -181,10 +184,30 @@ export async function POST(req: NextRequest) {
       (body.localProducts || []).forEach((p: any) => {
         if (p && p.slug && !deletedSet.has(p.slug)) {
           const existing = prodMap.get(p.slug) || {};
-          prodMap.set(p.slug, { ...existing, ...p });
+          const mergedProd = { ...existing, ...p };
+          if (p.onSale === false || mergedOverrides[p.slug]?.onSale === false) {
+            mergedProd.onSale = false;
+            delete mergedProd.originalPrice;
+            if (mergedProd.badge?.toLowerCase().trim() === "sale") {
+              mergedProd.badge = "";
+            }
+          }
+          prodMap.set(p.slug, mergedProd);
         }
       });
-      const localProducts = Array.from(prodMap.values());
+      const localProducts = Array.from(prodMap.values()).map((p: any) => {
+        const ov = mergedOverrides[p.slug];
+        if (p.onSale === false || (ov && ov.onSale === false)) {
+          const res = { ...p, ...(ov || {}) };
+          res.onSale = false;
+          delete res.originalPrice;
+          if (res.badge?.toLowerCase().trim() === "sale") {
+            res.badge = "";
+          }
+          return res;
+        }
+        return p;
+      });
 
       // 5. Deleted messages
       const deletedMsgIds = Array.from(

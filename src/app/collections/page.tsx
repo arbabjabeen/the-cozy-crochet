@@ -100,7 +100,7 @@ export default function CollectionsPage() {
       const catKey = p.category.toLowerCase().trim();
       const formattedTitle = p.category.charAt(0).toUpperCase() + p.category.slice(1);
       const imgSrc = typeof p.image === "string" ? p.image : (p.image as any)?.src || "/assets/cloud-throw.jpg";
-      const isItemOnSale = Boolean(p.onSale || (p.originalPrice && p.originalPrice > p.price));
+      const isItemOnSale = Boolean(p.onSale);
 
       if (collectionsMap.has(catKey)) {
         const existing = collectionsMap.get(catKey)!;
@@ -119,9 +119,7 @@ export default function CollectionsPage() {
   });
 
   const collections = Array.from(collectionsMap.values());
-  const saleProducts = products.filter(
-    (p) => Boolean(p.onSale || (p.originalPrice && p.originalPrice > p.price))
-  );
+  const saleProducts = products.filter((p) => Boolean(p.onSale));
 
   return (
     <StoreShell>
